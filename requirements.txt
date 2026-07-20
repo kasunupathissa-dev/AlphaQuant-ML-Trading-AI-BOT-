@@ -1,0 +1,12 @@
+ccxt
+ccxt[qa]
+pandas
+requests
+numpy
+pandas-ta
+xgboost
+scikit-learn
+sqlalchemy
+asyncio
+aiohttp
+schedule
