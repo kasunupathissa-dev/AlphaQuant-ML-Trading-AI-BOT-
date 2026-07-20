@@ -28,5 +28,14 @@ It utilizes a Dual-Model Meta-Labeling architecture, Platt-Scaled XGBoost classi
    - Trains separate `LONG` and `SHORT` AI models to solve directional class imbalance.
    - XGBoost probabilities are strictly calibrated using **Isotonic Regression (Platt Scaling)** to output True Empirical Probabilities.
 
+   ## ⚙️ Installation & Deployment
+   
+1. Clone the repository:
+2.Create an isolated Python Virtual Environment (Requires Python 3.12+):
+3. Install requirements:
+4.Build the initial Brains (Run locally first):
+5.Launch the Live Engine:
 
+⚠️ Disclaimer
+This system is designed for quantitative research. Cryptocurrencies are highly volatile. Use `LIVE_TRADING_ENABLED = False` to run the system in paper-trading/telemetry mode before deploying real capital.
    
