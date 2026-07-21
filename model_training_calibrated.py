@@ -1,4 +1,3 @@
-import sqlite3
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -8,15 +7,18 @@ from sklearn.metrics import precision_score
 import joblib
 import os
 
-DB_NAME = "alphaquant_ml_v4.db"
-TARGET_ASSETS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "ADA/USDT", "XRP/USDT"]
+# 🟢 V5 Upgrade: Use the centralized database configuration
+from database_config import get_db_engine
+
+TARGET_ASSETS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "ADA/USDT", "XRP/USDT", "LINK/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT"]
 
 def train_dual_meta_models():
     print("==================================================")
-    print("  ALPHAQUANT V4.4: DUAL-MODEL META-TRAINING       ")
+    print("  ALPHAQUANT V5: DUAL-MODEL META-TRAINING         ")
     print("==================================================")
 
-    conn = sqlite3.connect(DB_NAME)
+    engine = get_db_engine()
+    if engine is None: return
 
     for asset in TARGET_ASSETS:
         print(f"\n[SYSTEM] Training LONG and SHORT Brains for {asset}...")
@@ -29,24 +31,20 @@ def train_dual_meta_models():
                 primary_long_signal, primary_short_signal,
                 target_label_long, target_label_short
             FROM feature_store 
-            WHERE target_label_long IS NOT NULL AND asset = '{asset}'
+            WHERE (target_label_long IS NOT NULL OR target_label_short IS NOT NULL) AND asset = '{asset}'
         """
         try:
-            df = pd.read_sql_query(query, conn)
-        except Exception:
+            df = pd.read_sql(query, engine)
+        except Exception as e:
+            print(f"  [ERROR] DB Read failed for {asset}: {e}")
             continue
         
         if len(df) < 50: continue
 
-        # We will store both models in a single dictionary for this asset
         asset_brain = {}
 
-        # ==================================================
-        # 1. TRAIN LONG MODEL (META-LABELING)
-        # We only train the AI to predict the outcome when the Primary Signal said "BUY"
-        # ==================================================
+        # --- TRAIN LONG MODEL ---
         long_df = df[df['primary_long_signal'] == 1].copy()
-        
         if len(long_df) > 20:
             wins = len(long_df[long_df['target_label_long'] == 1.0])
             losses = len(long_df[long_df['target_label_long'] == 0.0])
@@ -60,10 +58,7 @@ def train_dual_meta_models():
                 
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                 
-                base_long = xgb.XGBClassifier(
-                    n_estimators=300, learning_rate=0.01, max_depth=3, 
-                    subsample=0.8, colsample_bytree=0.8, objective='binary:logistic', scale_pos_weight=scale_weight
-                )
+                base_long = xgb.XGBClassifier(n_estimators=300, learning_rate=0.01, max_depth=3, subsample=0.8, colsample_bytree=0.8, objective='binary:logistic', scale_pos_weight=scale_weight)
                 calibrated_long = CalibratedClassifierCV(estimator=base_long, method='isotonic', cv=3)
                 calibrated_long.fit(X_train, y_train)
                 
@@ -81,11 +76,8 @@ def train_dual_meta_models():
                 asset_brain['LONG'] = {'model': calibrated_long, 'threshold': best_thresh}
                 print(f"  -> LONG Calibrated. Base Threshold: {best_thresh*100:.1f}%")
 
-        # ==================================================
-        # 2. TRAIN SHORT MODEL (META-LABELING)
-        # ==================================================
+        # --- TRAIN SHORT MODEL ---
         short_df = df[df['primary_short_signal'] == 1].copy()
-        
         if len(short_df) > 20:
             wins = len(short_df[short_df['target_label_short'] == 1.0])
             losses = len(short_df[short_df['target_label_short'] == 0.0])
@@ -99,10 +91,7 @@ def train_dual_meta_models():
                 
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                 
-                base_short = xgb.XGBClassifier(
-                    n_estimators=300, learning_rate=0.01, max_depth=3, 
-                    subsample=0.8, colsample_bytree=0.8, objective='binary:logistic', scale_pos_weight=scale_weight
-                )
+                base_short = xgb.XGBClassifier(n_estimators=300, learning_rate=0.01, max_depth=3, subsample=0.8, colsample_bytree=0.8, objective='binary:logistic', scale_pos_weight=scale_weight)
                 calibrated_short = CalibratedClassifierCV(estimator=base_short, method='isotonic', cv=3)
                 calibrated_short.fit(X_train, y_train)
                 
@@ -125,9 +114,8 @@ def train_dual_meta_models():
             joblib.dump(asset_brain, safe_filename)
             print(f"  [SUCCESS] Saved Dual-Brain for {asset}.")
 
-    conn.close()
     print("\n==================================================")
-    print(" V4.4 Meta-Model Training Complete.")
+    print(" V5 Meta-Model Training Complete.")
     print("==================================================")
 
 if __name__ == "__main__":

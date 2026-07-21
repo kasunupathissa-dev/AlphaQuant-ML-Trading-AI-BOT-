@@ -1,13 +1,14 @@
-import sqlite3
 import pandas as pd
 import numpy as np
+from sqlalchemy import text
 
-DB_NAME = "alphaquant_ml_v4.db"
+# 🟢 V5 Upgrade: Use the centralized database configuration
+from database_config import get_db_engine
 
 class DualDirectionFeatureStore:
     def __init__(self):
         print("==================================================")
-        print("  ALPHAQUANT V4.4: DUAL-DIRECTION FEATURE STORE   ")
+        print("  ALPHAQUANT V5: DUAL-DIRECTION FEATURE STORE     ")
         print("==================================================")
 
     def calculate_ema(self, series, span):
@@ -57,7 +58,6 @@ class DualDirectionFeatureStore:
     def calculate_features(self, df):
         features = df.copy()
 
-        # 1. Trend Features
         features['ema_20'] = self.calculate_ema(features['close'], 20)
         features['ema_50'] = self.calculate_ema(features['close'], 50)
         features['ema_200'] = self.calculate_ema(features['close'], 200)
@@ -66,7 +66,6 @@ class DualDirectionFeatureStore:
         features['dist_ema_50'] = (features['close'] - features['ema_50']) / features['ema_50']
         features['dist_ema_200'] = (features['close'] - features['ema_200']) / features['ema_200']
 
-        # 2. Institutional Regime Features
         features['atr'] = self.calculate_atr(features, 14)
         features['atr_pct'] = features['atr'] / features['close']
         features['volatility_zscore'] = self.calculate_zscore(features['atr_pct'], 30)
@@ -76,15 +75,11 @@ class DualDirectionFeatureStore:
         features['adx_14'] = self.calculate_adx(features, 14)
         features['bb_width'] = self.calculate_bb_width(features['close'])
 
-        # 3. FVG Intensity
         features['fvg_bull_gap'] = features['low'] - features['high'].shift(2)
         features['fvg_bear_gap'] = features['low'].shift(2) - features['high']
         features['fvg_bull_intensity'] = np.where(features['fvg_bull_gap'] > 0, features['fvg_bull_gap'] / features['atr'], 0)
         features['fvg_bear_intensity'] = np.where(features['fvg_bear_gap'] > 0, features['fvg_bear_gap'] / features['atr'], 0)
 
-        # 🟢 V4.4: Primary Signal Generation (For Meta-Labeling)
-        # We need a basic rule-based signal to test the AI against.
-        # Primary LONG Signal: Price crosses above EMA-50 while EMA-50 is above EMA-200.
         features['prev_close'] = features['close'].shift(1)
         features['prev_ema_50'] = features['ema_50'].shift(1)
         
@@ -95,7 +90,6 @@ class DualDirectionFeatureStore:
             1, 0
         )
         
-        # Primary SHORT Signal: Price crosses below EMA-50 while EMA-50 is below EMA-200.
         features['primary_short_signal'] = np.where(
             (features['prev_close'] >= features['prev_ema_50']) & 
             (features['close'] < features['ema_50']) & 
@@ -112,74 +106,70 @@ class DualDirectionFeatureStore:
         return features
 
     def run(self):
-        conn = sqlite3.connect(DB_NAME)
-        assets_df = pd.read_sql_query("SELECT DISTINCT asset FROM market_data_1h", conn)
-        assets = assets_df['asset'].tolist()
+        engine = get_db_engine()
+        if engine is None: return
 
-        if not assets:
-            print("[ERROR] No data found.")
-            return
+        with engine.connect() as connection:
+            assets_df = pd.read_sql_query("SELECT DISTINCT asset FROM market_data_1h", connection)
+            assets = assets_df['asset'].tolist()
 
-        cursor = conn.cursor()
-        cursor.execute("DROP TABLE IF EXISTS feature_store")
-        
-        # Expanded Schema for Meta-Labeling
-        cursor.execute('''
-        CREATE TABLE feature_store (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            asset TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            dist_ema_20 REAL,
-            dist_ema_50 REAL,
-            dist_ema_200 REAL,
-            atr_pct REAL,
-            volatility_zscore REAL,
-            volume_zscore REAL,
-            chop_index REAL,
-            adx_14 REAL,
-            bb_width REAL,
-            fvg_bull_intensity REAL,
-            fvg_bear_intensity REAL,
-            primary_long_signal INTEGER,
-            primary_short_signal INTEGER,
-            target_label_long INTEGER,
-            target_label_short INTEGER,
-            UNIQUE(asset, timestamp)
-        )
-        ''')
-        conn.commit()
+            if not assets:
+                print("[ERROR] No data found.")
+                return
 
-        for asset in assets:
-            print(f"[PROCESS] Generating Meta-Labeling Features for {asset}...")
-            
-            query = f"SELECT timestamp, open, high, low, close, volume FROM market_data_1h WHERE asset = '{asset}' ORDER BY timestamp ASC"
-            df = pd.read_sql_query(query, conn)
-            
-            if len(df) < 250: continue
+            # Create the feature_store table with the correct schema for MySQL
+            connection.execute(text("DROP TABLE IF EXISTS feature_store"))
+            connection.execute(text('''
+            CREATE TABLE feature_store (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                asset VARCHAR(20) NOT NULL,
+                timestamp BIGINT NOT NULL,
+                dist_ema_20 DOUBLE,
+                dist_ema_50 DOUBLE,
+                dist_ema_200 DOUBLE,
+                atr_pct DOUBLE,
+                volatility_zscore DOUBLE,
+                volume_zscore DOUBLE,
+                chop_index DOUBLE,
+                adx_14 DOUBLE,
+                bb_width DOUBLE,
+                fvg_bull_intensity DOUBLE,
+                fvg_bear_intensity DOUBLE,
+                primary_long_signal INT,
+                primary_short_signal INT,
+                target_label_long INT,
+                target_label_short INT,
+                UNIQUE INDEX idx_asset_timestamp (asset, timestamp)
+            )
+            '''))
+            connection.commit()
 
-            feature_df = self.calculate_features(df)
-            feature_df['asset'] = asset
-            
-            ml_columns = [
-                'asset', 'timestamp', 'dist_ema_20', 'dist_ema_50', 'dist_ema_200',
-                'atr_pct', 'volatility_zscore', 'volume_zscore', 'chop_index', 'adx_14', 
-                'bb_width', 'fvg_bull_intensity', 'fvg_bear_intensity',
-                'primary_long_signal', 'primary_short_signal'
-            ]
-            
-            insert_df = feature_df[ml_columns]
-            insert_df.to_sql('temp_adv_features', conn, if_exists='replace', index=False)
-            
-            cursor.execute('''
-                INSERT INTO feature_store 
-                (asset, timestamp, dist_ema_20, dist_ema_50, dist_ema_200, atr_pct, volatility_zscore, volume_zscore, chop_index, adx_14, bb_width, fvg_bull_intensity, fvg_bear_intensity, primary_long_signal, primary_short_signal)
-                SELECT asset, timestamp, dist_ema_20, dist_ema_50, dist_ema_200, atr_pct, volatility_zscore, volume_zscore, chop_index, adx_14, bb_width, fvg_bull_intensity, fvg_bear_intensity, primary_long_signal, primary_short_signal
-                FROM temp_adv_features
-            ''')
-            conn.commit()
-            print(f"  [SUCCESS] Database populated with Dual-Direction Vectors.")
+            for asset in assets:
+                print(f"[PROCESS] Generating Meta-Labeling Features for {asset}...")
+                
+                query = f"SELECT timestamp, open, high, low, close, volume FROM market_data_1h WHERE asset = '{asset}' ORDER BY timestamp ASC"
+                df = pd.read_sql(query, connection)
+                
+                if len(df) < 250: continue
 
-        conn.close()
+                feature_df = self.calculate_features(df)
+                feature_df['asset'] = asset
+                
+                ml_columns = [
+                    'asset', 'timestamp', 'dist_ema_20', 'dist_ema_50', 'dist_ema_200',
+                    'atr_pct', 'volatility_zscore', 'volume_zscore', 'chop_index', 'adx_14', 
+                    'bb_width', 'fvg_bull_intensity', 'fvg_bear_intensity',
+                    'primary_long_signal', 'primary_short_signal'
+                ]
+                
+                insert_df = feature_df[ml_columns]
+
+                # Insert data into the newly created feature_store table
+                insert_df.to_sql('feature_store', connection, if_exists='append', index=False)
+                print(f"  [SUCCESS] Database populated with Dual-Direction Vectors.")
+            
+            connection.commit()
+
         print("\n==================================================")
         print("[SYSTEM] High-Dimensional Feature Generation Complete.")
         print("==================================================")
