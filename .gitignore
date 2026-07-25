@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+aq_env/
+env/
+venv/
+ENV/
+
+# Database & Runtime State
+*.db
+live_engine_state.json
+trading_log_*.csv
+logs/*
+!logs/.gitkeep
+
+# IDEs & System files
+.vscode/
+.idea/
+.DS_Store

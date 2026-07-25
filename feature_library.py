@@ -2,11 +2,10 @@ import pandas as pd
 import numpy as np
 
 # ==================================================
-# ALPHAQUANT V6.5: SHARED FEATURE LIBRARY
+# ALPHAQUANT V8.0: SHOTGUN FEATURE LIBRARY
 # ==================================================
-# This module centralizes all feature calculation logic to be used by
-# both the offline training pipeline and the live execution engine.
-# This adheres to the DRY (Don't Repeat Yourself) principle.
+# This module centralizes all feature calculation logic.
+# V8.0 introduces a dedicated function for the "Shotgun" architecture.
 # ==================================================
 
 def calculate_zscore(series, period=30):
@@ -23,15 +22,10 @@ def calculate_atr(df, period=14):
     ranges = pd.concat([high_low, high_close, low_close], axis=1)
     return np.max(ranges, axis=1).rolling(window=period).mean()
 
-def calculate_features_and_signals(df):
+def calculate_features_for_shotgun(df):
     """
-    Main function to calculate all price-derived features and primary signals.
-    
-    Args:
-        df (pd.DataFrame): DataFrame with columns ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-        
-    Returns:
-        pd.DataFrame: The original DataFrame with all feature and signal columns added.
+    Calculates all price-derived features for the Shotgun architecture.
+    This version omits the primary signal generation.
     """
     features = df.copy()
     
@@ -44,9 +38,9 @@ def calculate_features_and_signals(df):
     std_20 = features['close'].rolling(window=20).std()
     features['bb_width'] = ((sma_20 + (std_20 * 2)) - (sma_20 - (std_20 * 2))) / sma_20
     
-    # --- ADX Calculation ---
+    # --- ADX Calculation (V8.0 Bug Fix) ---
     plus_dm = features['high'].diff()
-    minus_dm = features['low'].diff(-1)
+    minus_dm = features['low'].diff() # Corrected from diff(-1)
     plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0.0)
     minus_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0.0)
     tr_series = pd.Series(np.max([features['high'] - features['low'], np.abs(features['high'] - features['close'].shift()), np.abs(features['low'] - features['close'].shift())], axis=0), index=df.index)
@@ -60,6 +54,15 @@ def calculate_features_and_signals(df):
     features['dist_ema_50'] = (features['close'] - features['ema_50']) / features['ema_50']
     features['dist_ema_200'] = (features['close'] - features['ema_200']) / features['ema_200']
     features['atr_pct'] = features['atr'] / features['close']
+    
+    return features
+
+def calculate_features_and_signals(df):
+    """
+    Main function to calculate all price-derived features and primary signals.
+    (Legacy function, kept for reference)
+    """
+    features = calculate_features_for_shotgun(df)
 
     # --- Primary Signal Generation ---
     features['prev_close'] = features['close'].shift(1)
@@ -67,6 +70,8 @@ def calculate_features_and_signals(df):
     features['primary_trend_long'] = np.where((features['prev_close'] <= features['prev_ema_50']) & (features['close'] > features['ema_50']) & (features['ema_50'] > features['ema_200']), 1, 0)
     features['primary_trend_short'] = np.where((features['prev_close'] >= features['prev_ema_50']) & (features['close'] < features['ema_50']) & (features['ema_50'] < features['ema_200']), 1, 0)
     
+    sma_20 = features['close'].rolling(window=20).mean()
+    std_20 = features['close'].rolling(window=20).std()
     bb_squeeze_thresh = features['bb_width'].quantile(0.10)
     is_squeeze = features['bb_width'].shift(1) < bb_squeeze_thresh
     upper_band, lower_band = sma_20 + (std_20 * 2), sma_20 - (std_20 * 2)
