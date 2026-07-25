@@ -127,8 +127,37 @@ class AlphaQuantV8_2:
                     live_prices[symbol] = ticker['last']
                     await self.manage_active_trades(symbol, ticker['last'])
             except Exception as e:
+                err_msg = f"⚠️ *[V8.2] Main Ticker Stream Failed*\nError: `{e}`\nReconnecting in 10 seconds..."
                 print(f"[ERROR] Main ticker stream failed: {e}. Reconnecting...")
+                send_telegram_message(err_msg)
                 await asyncio.sleep(10)
+
+    async def fallback_price_monitor(self):
+        print("[SYSTEM] Starting REST Fallback Price Monitor...")
+        while self.running:
+            try:
+                await asyncio.sleep(30)  # Check every 30 seconds
+                if not self.running: break
+                
+                active_symbols = list(set([t['asset'] for t in active_trades]))
+                if not active_symbols:
+                    continue
+                
+                print(f"[SYSTEM] Fallback polling {len(active_symbols)} active assets via REST...")
+                for symbol in active_symbols:
+                    try:
+                        ticker = await asyncio.to_thread(self.exchange_reg.fetch_ticker, symbol)
+                        current_price = ticker.get('last')
+                        if current_price is not None:
+                            live_prices[symbol] = current_price
+                            await self.manage_active_trades(symbol, current_price)
+                    except Exception as poll_err:
+                        print(f"[WARNING] REST fallback fetch failed for {symbol}: {poll_err}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[ERROR] Fallback price monitor failed: {e}")
+
 
     async def manage_active_trades(self, symbol, current_price):
         global active_trades
@@ -273,6 +302,7 @@ class AlphaQuantV8_2:
         await self.reconcile_open_positions()
         print("[SYSTEM] Booting V8.2 Asynchronous Event Loop...")
         self.tasks.append(asyncio.create_task(self.watch_all_tickers()))
+        self.tasks.append(asyncio.create_task(self.fallback_price_monitor()))
         self.tasks.append(asyncio.create_task(self.ml_inference_loop()))
         print(f"[SUCCESS] Async Websockets Live. V8.2 Meta-Agents actively hunting on {len(brains)} assets.")
         try: await asyncio.gather(*self.tasks)
