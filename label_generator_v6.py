@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sqlalchemy import text
+import config
 
 # 🟢 V6.4 Upgrade for V8 Shotgun Pipeline (Typo Fix)
 from database_config import get_db_engine
@@ -14,7 +15,7 @@ def calculate_atr(df, period=14):
     df_copy['tr'] = df_copy[['h-l', 'h-pc', 'l-pc']].max(axis=1)
     return df_copy['tr'].rolling(window=period).mean()
 
-def calculate_shotgun_labels(df, atr_profit_mult=1.5, time_limit_hours=24):
+def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_hours=24):
     """
     Calculates a single multi-class label based on the first barrier touched.
     - 1: LONG (Upper barrier hit first)
@@ -22,7 +23,7 @@ def calculate_shotgun_labels(df, atr_profit_mult=1.5, time_limit_hours=24):
     - 2: HOLD (Neither barrier hit within the time limit)
     """
     labels = pd.Series(2, index=df.index, dtype=int)
-    atr_series = calculate_atr(df, 14)
+    atr_series = calculate_atr(df, config.ATR_PERIOD)
     
     df_dt_index = df.set_index(pd.to_datetime(df['timestamp'], unit='ms'))
 
@@ -34,8 +35,8 @@ def calculate_shotgun_labels(df, atr_profit_mult=1.5, time_limit_hours=24):
         if pd.isna(current_atr) or current_atr <= 0:
             continue
 
-        upper_barrier = entry_price + (current_atr * atr_profit_mult)
-        lower_barrier = entry_price - (current_atr * atr_profit_mult)
+        upper_barrier = entry_price + (current_atr * atr_tp_mult)
+        lower_barrier = entry_price - (current_atr * atr_sl_mult)
 
         end_time = entry_time + pd.Timedelta(hours=time_limit_hours)
         future_window = df_dt_index.loc[entry_time:end_time].iloc[1:]
@@ -60,22 +61,33 @@ def calculate_shotgun_labels(df, atr_profit_mult=1.5, time_limit_hours=24):
 
 def generate_and_store_labels():
     print("==================================================")
-    print("  ALPHAQUANT V6.4: SYMMETRICAL META-LABELING      ")
+    print(f"  ALPHAQUANT: SYMMETRICAL META-LABELING ({config.TIMEFRAME}) ")
     print("==================================================")
 
     engine = get_db_engine()
     if engine is None: return
 
+    table_name_market = f"market_data_{config.TIMEFRAME}"
+    table_name_features = f"feature_store_{config.TIMEFRAME}"
+
     with engine.connect() as connection:
-        assets = pd.read_sql_query("SELECT DISTINCT asset FROM market_data_1h", connection)['asset'].tolist()
+        assets = pd.read_sql_query(f"SELECT DISTINCT asset FROM {table_name_market}", connection)['asset'].tolist()
 
         for asset in assets:
-            print(f"\n[PROCESS] Generating Symmetrical Labels for {asset}...")
+            print(f"\n[PROCESS] Generating Symmetrical Labels for {asset} ({config.TIMEFRAME})...")
             
-            query = f"SELECT timestamp, open, high, low, close FROM market_data_1h WHERE asset = '{asset}' ORDER BY timestamp ASC"
+            query = f"SELECT timestamp, open, high, low, close FROM {table_name_market} WHERE asset = '{asset}' ORDER BY timestamp ASC"
             df = pd.read_sql(query, connection)
+            if len(df) < 100:
+                print("  [SKIP] Not enough candles to label.")
+                continue
             
-            shotgun_labels = calculate_shotgun_labels(df)
+            shotgun_labels = calculate_shotgun_labels(
+                df, 
+                atr_tp_mult=config.ATR_TAKE_PROFIT_MULTIPLIER, 
+                atr_sl_mult=config.ATR_STOP_LOSS_MULTIPLIER,
+                time_limit_hours=config.BARRIER_TIME_LIMIT_HOURS
+            )
             df['target_label'] = shotgun_labels
             
             print("  --- Label Distribution ---")
@@ -85,7 +97,6 @@ def generate_and_store_labels():
             print(f"    Class 2 (HOLD):  {label_counts.get(2, 0)}")
             print("  --------------------------")
 
-            # 🟢 V6.4 TYPO FIX
             labeled_df = df.dropna(subset=['target_label']).copy()
             if labeled_df.empty: continue
 
@@ -94,7 +105,7 @@ def generate_and_store_labels():
             update_df.to_sql(temp_table_name, connection, if_exists='replace', index=False)
 
             update_sql = f"""
-            UPDATE feature_store fs JOIN {temp_table_name} temp ON fs.timestamp = temp.timestamp
+            UPDATE {table_name_features} fs JOIN {temp_table_name} temp ON fs.timestamp = temp.timestamp
             SET fs.target_label = temp.target_label
             WHERE fs.asset = '{asset}';
             """
@@ -102,10 +113,10 @@ def generate_and_store_labels():
             connection.execute(text(f"DROP TABLE {temp_table_name}"))
             connection.commit()
             
-            print(f"  [SUCCESS] Assigned outcomes to feature store.")
+            print(f"  [SUCCESS] Assigned outcomes to database table {table_name_features}.")
 
     print("\n==================================================")
-    print("[SYSTEM] Symmetrical Meta-Labeling Complete.")
+    print(f"[SYSTEM] Symmetrical Meta-Labeling Complete ({config.TIMEFRAME}).")
     print("==================================================")
 
 if __name__ == "__main__":

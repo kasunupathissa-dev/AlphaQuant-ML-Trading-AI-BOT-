@@ -1,9 +1,25 @@
-# AlphaQuant V7 Configuration File
+# AlphaQuant V8 Configuration File
 
 # --- System Settings ---
-LOG_FILE = "trading_log_v7.csv"
+LOG_FILE = "trading_log_v8.csv"
 STATE_FILE = "live_engine_state.json"
 LIVE_TRADING_ENABLED = False
+
+# --- Timeframe Settings ---
+TIMEFRAME = "15m"  # "15m" or "1h"
+INFERENCE_INTERVAL_SECONDS = 900  # 15 minutes (900s) for 15m, 3600s for 1h
+
+# --- Indicator Settings (Auto-scaled) ---
+if TIMEFRAME == "15m":
+    EMA_FAST_PERIOD = 200            # Matches the temporal scale of 1H EMA-50 (~50 hours)
+    EMA_SLOW_PERIOD = 800            # Matches the temporal scale of 1H EMA-200 (~200 hours)
+    ATR_PERIOD = 56                  # Smooths out noise for the shorter timeframe
+    BARRIER_TIME_LIMIT_HOURS = 24    # Equivalent to 96 bars on 15M (lookahead horizon)
+else:
+    EMA_FAST_PERIOD = 50
+    EMA_SLOW_PERIOD = 200
+    ATR_PERIOD = 14
+    BARRIER_TIME_LIMIT_HOURS = 24
 
 # --- Target Assets ---
 TARGET_ASSETS = [
@@ -11,16 +27,8 @@ TARGET_ASSETS = [
     "XRP/USDT", "LINK/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT"
 ]
 
-# --- Telegram Notifications ---
-# These should be set as environment variables for security
-# TELEGRAM_TOKEN = "YOUR_TELEGRAM_TOKEN"
-# TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
-
 # --- ML Model & Trading Parameters ---
-# This section will be expanded as we implement the "Shotgun" architecture
-# and centralize more parameters.
-MODEL_CONFIDENCE_THRESHOLD = 55.0 # Example: Minimum probability to consider a trade
-ATR_STOP_LOSS_MULTIPLIER = 1.0
-ATR_TAKE_PROFIT_MULTIPLIER = 1.5
-INFERENCE_INTERVAL_SECONDS = 3600 # Production: 1 Hour (3,600s)
-
+MODEL_CONFIDENCE_THRESHOLD = 55.0  # Minimum probability to consider a trade
+ATR_STOP_LOSS_MULTIPLIER = 1.0     # Optimized baseline for SL
+ATR_TAKE_PROFIT_MULTIPLIER = 1.5    # Optimized baseline for TP
+MAX_PRICE_DEVIATION_PCT = 0.005    # Max price deviation (0.5%) to prevent chasing extended entries

@@ -6,15 +6,11 @@ from sqlalchemy import text
 
 # 🟢 V5.2 Upgrade: Use the centralized database configuration
 from database_config import get_db_engine
-
-TARGET_ASSETS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "ADA/USDT", 
-    "XRP/USDT", "LINK/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT"
-]
+import config
 
 def fetch_and_store_historical_data():
     print("==================================================")
-    print("  ALPHAQUANT V5.2: ROBUST DATA INGESTION PIPELINE ")
+    print(f"  ALPHAQUANT: DATA INGESTION PIPELINE ({config.TIMEFRAME}) ")
     print("==================================================")
     
     engine = get_db_engine()
@@ -22,18 +18,21 @@ def fetch_and_store_historical_data():
 
     exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'future'}})
     limit = 1000 
+    table_name = f"market_data_{config.TIMEFRAME}"
 
-    for asset in TARGET_ASSETS:
+    for asset in config.TARGET_ASSETS:
+        # Ingest past 180 days
         since = exchange.parse8601((datetime.now(timezone.utc) - timedelta(days=180)).isoformat())
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching maximum history for {asset}...")
         
         all_ohlcv = []
         try:
             while True:
-                ohlcv = exchange.fetch_ohlcv(asset, "1h", since=since, limit=limit)
+                ohlcv = exchange.fetch_ohlcv(asset, config.TIMEFRAME, since=since, limit=limit)
                 if not ohlcv: break
                 all_ohlcv.extend(ohlcv)
                 since = ohlcv[-1][0] + 1
+                time.sleep(0.1)
 
             if not all_ohlcv:
                 print(f"  [INFO] No new data found for {asset}.")
@@ -46,8 +45,8 @@ def fetch_and_store_historical_data():
             df = df[['asset', 'timestamp', 'datetime', 'open', 'high', 'low', 'close', 'volume']]
             
             with engine.connect() as connection:
-                connection.execute(text('''
-                CREATE TABLE IF NOT EXISTS market_data_1h (
+                connection.execute(text(f'''
+                CREATE TABLE IF NOT EXISTS {table_name} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     asset VARCHAR(20) NOT NULL,
                     timestamp BIGINT NOT NULL,
@@ -58,20 +57,21 @@ def fetch_and_store_historical_data():
                 
                 df.to_sql('temp_market_data', connection, if_exists='replace', index=False)
                 
-                upsert_sql = """
-                INSERT INTO market_data_1h (asset, timestamp, datetime, open, high, low, close, volume)
+                upsert_sql = f"""
+                INSERT INTO {table_name} (asset, timestamp, datetime, open, high, low, close, volume)
                 SELECT asset, timestamp, datetime, open, high, low, close, volume FROM temp_market_data
                 ON DUPLICATE KEY UPDATE
                     open = VALUES(open), high = VALUES(high), low = VALUES(low), 
                     close = VALUES(close), volume = VALUES(volume);
                 """
-                result = connection.execute(text(upsert_sql))
+                connection.execute(text(upsert_sql))
+                connection.execute(text("DROP TABLE IF EXISTS temp_market_data"))
                 connection.commit()
             
             print(f"[SUCCESS] {asset}: Synced {len(df)} total candles to MySQL.")
             
-            # 🟢 V5.2: Post-Ingestion Verification Step
-            verify_data_integrity(engine, asset)
+            # Post-Ingestion Verification Step
+            verify_data_integrity(engine, asset, table_name)
 
             time.sleep(1)
             
@@ -79,16 +79,16 @@ def fetch_and_store_historical_data():
             print(f"[ERROR] Failed to sync data for {asset}: {e}")
 
     print("\n==================================================")
-    print("[SYSTEM] V5.2 Data Ingestion Cycle Complete.")
+    print(f"[SYSTEM] Data Ingestion Cycle Complete ({config.TIMEFRAME}).")
     print("==================================================")
 
-def verify_data_integrity(engine, asset):
+def verify_data_integrity(engine, asset, table_name):
     """
     Runs duplicate and gap checks on the ingested data for a specific asset.
     """
     with engine.connect() as connection:
         # 1. Duplicate Check
-        dup_query = f"SELECT COUNT(*) FROM (SELECT COUNT(timestamp) as c FROM market_data_1h WHERE asset = '{asset}' GROUP BY timestamp HAVING c > 1) as duplicates;"
+        dup_query = f"SELECT COUNT(*) FROM (SELECT COUNT(timestamp) as c FROM {table_name} WHERE asset = '{asset}' GROUP BY timestamp HAVING c > 1) as duplicates;"
         duplicate_count = connection.execute(text(dup_query)).scalar()
         if duplicate_count > 0:
             print(f"  [WARNING] Found {duplicate_count} duplicate timestamps for {asset}.")
@@ -96,14 +96,14 @@ def verify_data_integrity(engine, asset):
             print(f"  [OK] No duplicate timestamps found for {asset}.")
 
         # 2. Gap Check
-        # Check for missing 1-hour intervals
-        df = pd.read_sql(f"SELECT timestamp FROM market_data_1h WHERE asset = '{asset}' ORDER BY timestamp", connection)
+        # Check for missing intervals based on configuration
+        df = pd.read_sql(f"SELECT timestamp FROM {table_name} WHERE asset = '{asset}' ORDER BY timestamp", connection)
         df['timestamp_dt'] = pd.to_datetime(df['timestamp'], unit='ms')
         time_diffs = df['timestamp_dt'].diff().dt.total_seconds().dropna()
-        gaps = time_diffs[time_diffs > 3600] # 3600 seconds in an hour
+        gaps = time_diffs[time_diffs > config.INFERENCE_INTERVAL_SECONDS]
         
         if not gaps.empty:
-            print(f"  [WARNING] Found {len(gaps)} gaps in the time series for {asset}. Largest gap: {gaps.max()/3600:.1f} hours.")
+            print(f"  [WARNING] Found {len(gaps)} gaps in the time series for {asset}. Largest gap: {gaps.max()/config.INFERENCE_INTERVAL_SECONDS:.1f} intervals.")
         else:
             print(f"  [OK] Time series is continuous for {asset}.")
 

@@ -221,22 +221,27 @@ class AlphaQuantV8_2:
                     if asset_locks.get(asset, False): continue
                     
                     try:
-                        ohlcv = await self.exchange_pro.fetch_ohlcv(asset, "1h", limit=250)
+                        fetch_limit = 1600 if config.TIMEFRAME == "15m" else 250
+                        ohlcv = await self.exchange_pro.fetch_ohlcv(asset, config.TIMEFRAME, limit=fetch_limit)
                         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                         
                         feature_df = calculate_features_for_shotgun(df)
                         
                         funding_history = self.exchange_reg.fetch_funding_rate_history(asset, limit=100)
-                        oi_history = self.exchange_reg.fetch_open_interest_history(asset, '1h', limit=100)
+                        oi_tf = '15m' if config.TIMEFRAME == '15m' else '1h'
+                        oi_history = self.exchange_reg.fetch_open_interest_history(asset, oi_tf, limit=100)
                         funding_df = pd.DataFrame(funding_history)[['timestamp', 'fundingRate']]
                         oi_df = pd.DataFrame(oi_history)[['timestamp', 'openInterestAmount']]
                         funding_df['timestamp'] = pd.to_datetime(funding_df['timestamp'], unit='ms')
                         oi_df['timestamp'] = pd.to_datetime(oi_df['timestamp'], unit='ms')
                         
-                        funding_df = funding_df.set_index('timestamp').resample('1h').last()
-                        oi_df = oi_df.set_index('timestamp').resample('1h').last()
-                        funding_df['funding_rate_zscore'] = calculate_zscore(funding_df['fundingRate'])
-                        oi_df['oi_zscore'] = calculate_zscore(oi_df['openInterestAmount'])
+                        resample_rule = '15min' if config.TIMEFRAME == '15m' else '1h'
+                        funding_df = funding_df.set_index('timestamp').resample(resample_rule).last()
+                        oi_df = oi_df.set_index('timestamp').resample(resample_rule).last()
+                        
+                        z_period = 120 if config.TIMEFRAME == "15m" else 30
+                        funding_df['funding_rate_zscore'] = calculate_zscore(funding_df['fundingRate'], z_period)
+                        oi_df['oi_zscore'] = calculate_zscore(oi_df['openInterestAmount'], z_period)
 
                         feature_df['datetime'] = pd.to_datetime(feature_df['timestamp'], unit='ms')
                         feature_df = feature_df.set_index('datetime')
@@ -264,7 +269,26 @@ class AlphaQuantV8_2:
                         win_prob = probabilities[prediction] * 100
                         
                         if win_prob >= config.MODEL_CONFIDENCE_THRESHOLD:
-                            entry_price = live_prices.get(asset, last_closed['close'])
+                            # 🟢 V8.3 Upgrade: Fetch actual live price via REST to guarantee accuracy
+                            # and prevent stale entry prices or inverted SL/TP parameters.
+                            # Fallback: if the REST fetch fails or returns None, we explicitly use the
+                            # last closed candle's close price (final amount) to avoid stale websocket data.
+                            try:
+                                ticker = await asyncio.to_thread(self.exchange_reg.fetch_ticker, asset)
+                                entry_price = ticker.get('last') if ticker else None
+                                if not entry_price or pd.isna(entry_price):
+                                    raise ValueError("Ticker last price is empty or invalid")
+                            except Exception as price_err:
+                                print(f"[WARNING] REST live price fetch failed or empty for {asset}: {price_err}. Falling back to last closed candle price: {last_closed['close']}")
+                                entry_price = last_closed['close']
+
+                            # 🟢 V8.3 Slippage Boundary Check: Prevent chasing entries into extended markets
+                            trigger_price = last_closed['close']
+                            deviation = abs(entry_price - trigger_price) / trigger_price
+                            if deviation > getattr(config, 'MAX_PRICE_DEVIATION_PCT', 0.005):
+                                print(f"[REJECT] {asset} live price ${entry_price:,.4f} is too far from trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%). Rejecting trade entry.")
+                                continue
+                                
                             atr_val = last_closed['atr']
                             sl = entry_price - atr_val * config.ATR_STOP_LOSS_MULTIPLIER if direction == "LONG" else entry_price + atr_val * config.ATR_STOP_LOSS_MULTIPLIER
                             tp = entry_price + atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER if direction == "LONG" else entry_price - atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER

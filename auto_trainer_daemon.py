@@ -27,9 +27,9 @@ def job():
     send_telegram_message("🤖 *[V7.1 Auto-Train]*\nStarting weekly model retraining cycle...")
 
     try:
-        # 🟢 V7.1 FIX: Run the single, master pipeline script
+        # 🟢 V8.3 Upgrade: Run the master V8 15M pipeline script
         result = subprocess.run(
-            [sys.executable, "run_full_pipeline_v6.py"], 
+            [sys.executable, "run_full_pipeline_v8.py"], 
             check=True, 
             capture_output=True, 
             text=True,
