@@ -584,16 +584,23 @@
             
             trades.forEach(t => {
                 const tr = document.createElement('tr');
-                const isWin = t.status.toUpperCase() === 'WIN';
+                const statusStr = t.status || 'LOSS';
+                const isWin = statusStr.toUpperCase() === 'WIN';
+                const entryVal = typeof t.entry === 'number' ? t.entry : parseFloat(t.entry || 0);
+                const exitVal = typeof t.exit_price === 'number' ? t.exit_price : parseFloat(t.exit_price || 0);
+                const probVal = typeof t.win_prob === 'number' ? t.win_prob : parseFloat(t.win_prob || 0);
+                const pnlVal = typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl || 0);
+                const directionStr = t.direction || 'LONG';
+                
                 tr.innerHTML = `
-                    <td style="color: var(--text-secondary); font-size:12px;">${t.timestamp}</td>
-                    <td><strong>${t.asset}</strong></td>
-                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
-                    <td>$${t.entry.toFixed(4)}</td>
-                    <td>$${t.exit_price ? t.exit_price.toFixed(4) : 'N/A'}</td>
-                    <td><span class="badge badge-${isWin ? 'win' : 'loss'}">${t.status}</span></td>
-                    <td>${t.win_prob.toFixed(2)}%</td>
-                    <td><span class="${t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}</span></td>
+                    <td style="color: var(--text-secondary); font-size:12px;">${t.timestamp || 'N/A'}</td>
+                    <td><strong>${t.asset || 'UNKNOWN'}</strong></td>
+                    <td><span class="badge badge-${directionStr.toLowerCase()}">${directionStr}</span></td>
+                    <td>$${entryVal.toFixed(4)}</td>
+                    <td>$${exitVal ? exitVal.toFixed(4) : 'N/A'}</td>
+                    <td><span class="badge badge-${isWin ? 'win' : 'loss'}">${statusStr}</span></td>
+                    <td>${probVal.toFixed(2)}%</td>
+                    <td><span class="${pnlVal >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}</span></td>
                 `;
                 body.appendChild(tr);
             });
@@ -609,7 +616,8 @@
             const data = [];
             
             sortedTrades.forEach((t, i) => {
-                cumulative += t.pnl;
+                const pnlVal = typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl || 0);
+                cumulative += isNaN(pnlVal) ? 0 : pnlVal;
                 labels.push(`Trade ${i+1}`);
                 data.push(cumulative);
             });
