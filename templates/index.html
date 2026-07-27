@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaQuant AI - Dashboard</title>
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-base: #0b0e17;
+            --bg-surface: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --color-long: #3b82f6; /* Blue-500 */
+            --color-short: #ef4444; /* Red-500 */
+            --color-win: #10b981; /* Green-500 */
+            --color-win-glow: rgba(16, 185, 129, 0.15);
+            --color-loss: #f43f5e; /* Rose-500 */
+            --color-loss-glow: rgba(244, 63, 94, 0.15);
+            --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top right, #111a2e 0%, var(--bg-base) 60%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 24px;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            background: var(--bg-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 24px;
+        }
+
+        .logo-section h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #60a5fa 0%, #34d399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-section p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 9999px;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-secondary);
+        }
+
+        .status-dot.active {
+            background-color: var(--color-win);
+            box-shadow: 0 0 12px var(--color-win);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.inactive {
+            background-color: var(--color-loss);
+            box-shadow: 0 0 12px var(--color-loss);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .stat-card p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .stat-card h2 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 1024px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-container {
+            background: var(--bg-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+            height: 380px; /* Fixed height prevents Chart.js infinite resize stretch loop */
+        }
+
+        .chart-container h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .sections-tabs {
+            background: var(--bg-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 24px;
+        }
+
+        .tab-headers {
+            display: flex;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 15px;
+            font-weight: 500;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .tab-btn.active {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        th {
+            color: var(--text-secondary);
+            font-weight: 500;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-long {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--color-long);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .badge-short {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-short);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .badge-win {
+            background: var(--color-win-glow);
+            color: var(--color-win);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-loss {
+            background: var(--color-loss-glow);
+            color: var(--color-loss);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+        }
+
+        .pnl-positive {
+            color: var(--color-win);
+            font-weight: 600;
+        }
+
+        .pnl-negative {
+            color: var(--color-loss);
+            font-weight: 600;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .penalty-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        
+        .penalty-card {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.15);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .penalty-card h4 {
+            font-size: 15px;
+            color: var(--text-primary);
+        }
+        
+        .penalty-card p {
+            font-size: 12px;
+            color: var(--color-short);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-section">
+            <h1>AlphaQuant AI</h1>
+            <p>Live Scalping Terminal & Analyzer</p>
+        </div>
+        <div class="status-badge">
+            <span id="bot-status-dot" class="status-dot"></span>
+            <span id="bot-status-text">Checking Status...</span>
+        </div>
+    </header>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <p>TOTAL PROFIT</p>
+            <h2 id="stat-total-pnl">$0.00</h2>
+        </div>
+        <div class="stat-card">
+            <p>WIN RATE</p>
+            <h2 id="stat-win-rate">0.00%</h2>
+        </div>
+        <div class="stat-card">
+            <p>TOTAL TRADES</p>
+            <h2 id="stat-total-trades">0</h2>
+        </div>
+        <div class="stat-card">
+            <p>PROFIT FACTOR</p>
+            <h2 id="stat-profit-factor">0.00</h2>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-container">
+            <h3>Cumulative Profit Performance (Last 250 Trades)</h3>
+            <canvas id="pnlChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Asset Win Rates</h3>
+            <canvas id="assetChart"></canvas>
+        </div>
+    </div>
+
+    <div class="sections-tabs">
+        <div class="tab-headers">
+            <button class="tab-btn active" onclick="switchTab('active-trades-tab')">Active Trades</button>
+            <button class="tab-btn" onclick="switchTab('asset-performance-tab')">Asset Breakdown</button>
+            <button class="tab-btn" onclick="switchTab('penalty-box-tab')">Penalty Box</button>
+            <button class="tab-btn" onclick="switchTab('trade-history-tab')">Recent Trade Log</button>
+        </div>
+
+        <!-- Tab: Active Trades -->
+        <div id="active-trades-tab" class="tab-content active">
+            <table id="active-trades-table">
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Direction</th>
+                        <th>Entry Price</th>
+                        <th>Stop Loss</th>
+                        <th>Take Profit</th>
+                        <th>AI Probability</th>
+                        <th>Position Size</th>
+                    </tr>
+                </thead>
+                <tbody id="active-trades-body">
+                    <!-- Dynamic Rows -->
+                </tbody>
+            </table>
+            <div id="active-trades-empty" class="empty-state">No active trades currently open.</div>
+        </div>
+
+        <!-- Tab: Asset Performance -->
+        <div id="asset-performance-tab" class="tab-content">
+            <table id="asset-performance-table">
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Total Trades</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Win Rate</th>
+                        <th>Net Profit</th>
+                    </tr>
+                </thead>
+                <tbody id="asset-performance-body">
+                    <!-- Dynamic Rows -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Tab: Penalty Box -->
+        <div id="penalty-box-tab" class="tab-content">
+            <div id="penalty-box-body" class="penalty-grid">
+                <!-- Dynamic Penalty Cards -->
+            </div>
+            <div id="penalty-box-empty" class="empty-state">All assets are active. No penalty blocks.</div>
+        </div>
+
+        <!-- Tab: Trade History -->
+        <div id="trade-history-tab" class="tab-content">
+            <table id="trade-history-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Asset</th>
+                        <th>Direction</th>
+                        <th>Entry Price</th>
+                        <th>Exit Price</th>
+                        <th>Status</th>
+                        <th>AI Probability</th>
+                        <th>PnL ($)</th>
+                    </tr>
+                </thead>
+                <tbody id="trade-history-body">
+                    <!-- Dynamic Rows -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let pnlChart = null;
+        let assetChart = null;
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function fetchDashboardData() {
+            try {
+                // 1. Fetch State
+                const stateRes = await fetch('/api/state');
+                const state = await stateRes.json();
+                updateStatusBadge(state);
+                updateActiveTrades(state.active_trades);
+                updatePenaltyBox(state.asset_penalty_box);
+
+                // 2. Fetch Stats
+                const statsRes = await fetch('/api/stats');
+                const stats = await statsRes.json();
+                updateStatCards(stats);
+                updateAssetPerformanceTable(stats.asset_breakdown);
+                renderAssetChart(stats.asset_breakdown);
+
+                // 3. Fetch Trades History
+                const tradesRes = await fetch('/api/trades');
+                const trades = await tradesRes.json();
+                updateTradeHistory(trades);
+                renderPnlChart(trades);
+
+            } catch (e) {
+                console.error("Dashboard refresh failed: ", e);
+            }
+        }
+
+        function updateStatusBadge(state) {
+            const dot = document.getElementById('bot-status-dot');
+            const text = document.getElementById('bot-status-text');
+            
+            if (state.is_active) {
+                dot.className = "status-dot active";
+                text.innerText = `Active (Last loop: ${state.last_update})`;
+            } else {
+                dot.className = "status-dot inactive";
+                text.innerText = `Inactive (Offline / Idle since ${state.last_update || 'N/A'})`;
+            }
+        }
+
+        function updateActiveTrades(activeTrades) {
+            const body = document.getElementById('active-trades-body');
+            const empty = document.getElementById('active-trades-empty');
+            const table = document.getElementById('active-trades-table');
+            
+            body.innerHTML = '';
+            if (!activeTrades || activeTrades.length === 0) {
+                empty.style.display = 'block';
+                table.style.display = 'none';
+                return;
+            }
+            
+            empty.style.display = 'none';
+            table.style.display = 'table';
+            
+            activeTrades.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${t.asset}</strong></td>
+                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
+                    <td>$${t.entry.toFixed(4)}</td>
+                    <td>$${t.sl.toFixed(4)}</td>
+                    <td>$${t.tp.toFixed(4)}</td>
+                    <td>${t.ai_prob.toFixed(2)}%</td>
+                    <td>$${t.position_size.toFixed(2)}</td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function updatePenaltyBox(penaltyBox) {
+            const body = document.getElementById('penalty-box-body');
+            const empty = document.getElementById('penalty-box-empty');
+            
+            body.innerHTML = '';
+            const assets = Object.keys(penaltyBox || {});
+            if (assets.length === 0) {
+                empty.style.display = 'block';
+                return;
+            }
+            
+            empty.style.display = 'none';
+            assets.forEach(a => {
+                const expiry = new Date(penaltyBox[a] * 1000).toLocaleTimeString();
+                const card = document.createElement('div');
+                card.className = 'penalty-card';
+                card.innerHTML = `
+                    <div>
+                        <h4>${a}</h4>
+                        <p>Performance Block Active</p>
+                    </div>
+                    <span class="badge badge-loss">Expires: ${expiry}</span>
+                `;
+                body.appendChild(card);
+            });
+        }
+
+        function updateStatCards(stats) {
+            const pnlEl = document.getElementById('stat-total-pnl');
+            pnlEl.innerText = `$${stats.total_pnl.toFixed(2)}`;
+            pnlEl.className = stats.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            
+            document.getElementById('stat-win-rate').innerText = `${stats.win_rate.toFixed(2)}%`;
+            document.getElementById('stat-total-trades').innerText = stats.total_trades;
+            document.getElementById('stat-profit-factor').innerText = stats.profit_factor.toFixed(2);
+        }
+
+        function updateAssetPerformanceTable(breakdown) {
+            const body = document.getElementById('asset-performance-body');
+            body.innerHTML = '';
+            
+            Object.keys(breakdown || {}).sort().forEach(asset => {
+                const data = breakdown[asset];
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${asset}</strong></td>
+                    <td>${data.trades}</td>
+                    <td>${data.wins}</td>
+                    <td>${data.trades - data.wins}</td>
+                    <td>${data.win_rate.toFixed(2)}%</td>
+                    <td><span class="${data.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${data.pnl.toFixed(2)}</span></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function updateTradeHistory(trades) {
+            const body = document.getElementById('trade-history-body');
+            body.innerHTML = '';
+            
+            trades.forEach(t => {
+                const tr = document.createElement('tr');
+                const isWin = t.status.toUpperCase() === 'WIN';
+                tr.innerHTML = `
+                    <td style="color: var(--text-secondary); font-size:12px;">${t.timestamp}</td>
+                    <td><strong>${t.asset}</strong></td>
+                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
+                    <td>$${t.entry.toFixed(4)}</td>
+                    <td>$${t.exit_price ? t.exit_price.toFixed(4) : 'N/A'}</td>
+                    <td><span class="badge badge-${isWin ? 'win' : 'loss'}">${t.status}</span></td>
+                    <td>${t.win_prob.toFixed(2)}%</td>
+                    <td><span class="${t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}</span></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function renderPnlChart(trades) {
+            if (!trades || trades.length === 0) return;
+            
+            // Calculate cumulative PnL forward in time
+            const sortedTrades = [...trades].reverse();
+            let cumulative = 0;
+            const labels = [];
+            const data = [];
+            
+            sortedTrades.forEach((t, i) => {
+                cumulative += t.pnl;
+                labels.push(`Trade ${i+1}`);
+                data.push(cumulative);
+            });
+
+            if (pnlChart) {
+                pnlChart.data.labels = labels;
+                pnlChart.data.datasets[0].data = data;
+                pnlChart.update();
+                return;
+            }
+
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            pnlChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Net Balance ($)',
+                        data: data,
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { color: '#9ca3af', font: { size: 10 } } },
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        }
+
+        function renderAssetChart(breakdown) {
+            const assets = Object.keys(breakdown || {}).sort();
+            const winRates = assets.map(a => breakdown[a].win_rate);
+            
+            if (assetChart) {
+                assetChart.data.labels = assets;
+                assetChart.data.datasets[0].data = winRates;
+                assetChart.update();
+                return;
+            }
+
+            const ctx = document.getElementById('assetChart').getContext('2d');
+            assetChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: assets,
+                    datasets: [{
+                        data: winRates,
+                        backgroundColor: 'rgba(59, 130, 246, 0.55)',
+                        borderColor: '#3b82f6',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { min: 0, max: 100, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af', callback: v => v + '%' } },
+                        y: { grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Fetch on boot, and refresh every 10 seconds
+        fetchDashboardData();
+        setInterval(fetchDashboardData, 10000);
+    </script>
+</body>
+</html>
