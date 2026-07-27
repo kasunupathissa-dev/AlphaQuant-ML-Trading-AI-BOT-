@@ -68,12 +68,13 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                         for row in reader:
                             # Convert numerical fields
                             try:
-                                row['entry'] = float(row['entry'])
-                                row['sl'] = float(row['sl'])
-                                row['tp'] = float(row['tp'])
-                                row['win_prob'] = float(row['win_prob'])
-                                row['pnl'] = float(row['pnl'])
-                                row['exit_price'] = float(row['exit_price']) if row.get('exit_price') else None
+                                if 'entry' in row and row['entry']: row['entry'] = float(row['entry'])
+                                if 'sl' in row and row['sl']: row['sl'] = float(row['sl'])
+                                if 'tp' in row and row['tp']: row['tp'] = float(row['tp'])
+                                if 'win_prob' in row and row['win_prob']: row['win_prob'] = float(row['win_prob'])
+                                if 'pnl' in row and row['pnl']: row['pnl'] = float(row['pnl'])
+                                if 'exit_price' in row and row['exit_price']:
+                                    row['exit_price'] = float(row['exit_price'])
                             except ValueError:
                                 pass
                             trades.append(row)
@@ -109,9 +110,9 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                         reader = csv.DictReader(f)
                         for row in reader:
                             try:
-                                pnl = float(row['pnl'])
-                                status = row['status'].upper()
-                                asset = row['asset']
+                                pnl = float(row.get('pnl', 0.0))
+                                status = row.get('status', 'LOSS').upper()
+                                asset = row.get('asset', 'UNKNOWN')
                                 
                                 stats["total_trades"] += 1
                                 stats["total_pnl"] += pnl
