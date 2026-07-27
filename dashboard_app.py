@@ -127,7 +127,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                 stats["total_pnl"] += pnl
                                 pnl_list.append(pnl)
                                 
-                                if "WIN" in status:
+                                if "PROFIT" in status or "WIN" in status:
                                     stats["wins"] += 1
                                     wins_list.append(pnl)
                                 else:
@@ -139,7 +139,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                     asset_data[asset] = {"trades": 0, "wins": 0, "pnl": 0.0}
                                 asset_data[asset]["trades"] += 1
                                 asset_data[asset]["pnl"] += pnl
-                                if "WIN" in status:
+                                if "PROFIT" in status or "WIN" in status:
                                     asset_data[asset]["wins"] += 1
                                     
                             except (ValueError, KeyError):

@@ -585,7 +585,7 @@
             trades.forEach(t => {
                 const tr = document.createElement('tr');
                 const statusStr = t.status || 'LOSS';
-                const isWin = statusStr.toUpperCase() === 'WIN';
+                const isWin = statusStr.toUpperCase() === 'WIN' || statusStr.toUpperCase() === 'PROFIT';
                 const entryVal = typeof t.entry === 'number' ? t.entry : parseFloat(t.entry || 0);
                 const exitVal = typeof t.exit_price === 'number' ? t.exit_price : parseFloat(t.exit_price || 0);
                 const probVal = typeof t.win_prob === 'number' ? t.win_prob : parseFloat(t.win_prob || 0);
