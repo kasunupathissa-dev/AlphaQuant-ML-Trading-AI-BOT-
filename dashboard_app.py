@@ -66,12 +66,20 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     with open(LOG_FILE, mode='r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         for row in reader:
+                            # Normalize keys to lowercase
+                            row = {k.lower(): v for k, v in row.items() if k is not None}
+                            # Map aliases
+                            if 'ai_prob' in row:
+                                row['win_prob'] = row['ai_prob']
+                                
                             # Convert numerical fields
                             try:
                                 if 'entry' in row and row['entry']: row['entry'] = float(row['entry'])
                                 if 'sl' in row and row['sl']: row['sl'] = float(row['sl'])
                                 if 'tp' in row and row['tp']: row['tp'] = float(row['tp'])
-                                if 'win_prob' in row and row['win_prob']: row['win_prob'] = float(row['win_prob'])
+                                if 'win_prob' in row and row['win_prob']:
+                                    prob_str = str(row['win_prob']).replace('%', '').strip()
+                                    row['win_prob'] = float(prob_str) if prob_str else 0.0
                                 if 'pnl' in row and row['pnl']: row['pnl'] = float(row['pnl'])
                                 if 'exit_price' in row and row['exit_price']:
                                     row['exit_price'] = float(row['exit_price'])
@@ -109,6 +117,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     with open(LOG_FILE, mode='r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         for row in reader:
+                            row = {k.lower(): v for k, v in row.items() if k is not None}
                             try:
                                 pnl = float(row.get('pnl', 0.0))
                                 status = row.get('status', 'LOSS').upper()
