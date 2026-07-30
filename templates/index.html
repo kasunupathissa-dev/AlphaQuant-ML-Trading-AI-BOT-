@@ -145,12 +145,6 @@
             margin-bottom: 24px;
         }
 
-        @media (max-width: 1024px) {
-            .charts-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
         .chart-container {
             background: var(--bg-surface);
             backdrop-filter: blur(12px);
@@ -159,7 +153,8 @@
             padding: 24px;
             box-shadow: var(--card-shadow);
             position: relative;
-            height: 380px; /* Fixed height prevents Chart.js infinite resize stretch loop */
+            height: 380px; 
+            overflow: hidden;
         }
 
         .chart-container h3 {
@@ -218,11 +213,18 @@
             display: block;
         }
 
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
             text-align: left;
             font-size: 14px;
+            min-width: 600px;
         }
 
         th {
@@ -317,6 +319,23 @@
             color: var(--color-short);
             margin-top: 4px;
         }
+
+        /* Responsive Layout Overrides */
+        @media (max-width: 900px) {
+            body { padding: 12px; }
+            header { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+            .tab-headers { flex-wrap: wrap; }
+            .analytics-grid { grid-template-columns: 1fr !important; }
+            .funnel-and-health-grid { grid-template-columns: 1fr !important; }
+            .analytics-sub-grid { grid-template-columns: 1fr !important; }
+        }
+
+        @media (max-width: 500px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .logo-section h1 { font-size: 20px; }
+        }
     </style>
 </head>
 <body>
@@ -324,7 +343,7 @@
     <header>
         <div class="logo-section">
             <h1>AlphaQuant AI</h1>
-            <p>Live Scalping Terminal & Analyzer</p>
+            <p>Live Scalping Terminal & Analyzer (Stockholm Time)</p>
         </div>
         <div class="status-badge">
             <span id="bot-status-dot" class="status-dot"></span>
@@ -365,6 +384,7 @@
     <div class="sections-tabs">
         <div class="tab-headers">
             <button class="tab-btn active" onclick="switchTab('active-trades-tab')">Active Trades</button>
+            <button class="tab-btn" onclick="switchTab('analytics-tab')">Analytics & Calibration</button>
             <button class="tab-btn" onclick="switchTab('asset-performance-tab')">Asset Breakdown</button>
             <button class="tab-btn" onclick="switchTab('penalty-box-tab')">Penalty Box</button>
             <button class="tab-btn" onclick="switchTab('trade-history-tab')">Recent Trade Log</button>
@@ -372,42 +392,196 @@
 
         <!-- Tab: Active Trades -->
         <div id="active-trades-tab" class="tab-content active">
-            <table id="active-trades-table">
-                <thead>
-                    <tr>
-                        <th>Asset</th>
-                        <th>Direction</th>
-                        <th>Entry Price</th>
-                        <th>Stop Loss</th>
-                        <th>Take Profit</th>
-                        <th>AI Probability</th>
-                        <th>Position Size</th>
-                    </tr>
-                </thead>
-                <tbody id="active-trades-body">
-                    <!-- Dynamic Rows -->
-                </tbody>
-            </table>
+            <!-- V8.5 Exposure & Correlation Alerts -->
+            <div id="exposure-alerts-container" style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <div class="stat-card" style="padding: 12px 20px; flex: 1; min-width: 200px;">
+                    <p style="font-size: 11px;">TOTAL OPEN EXPOSURE</p>
+                    <h3 id="total-open-exposure" style="font-size: 18px; margin-top: 4px;">$0.00</h3>
+                </div>
+                <div id="correlation-warning-card" class="penalty-card" style="display: none; flex: 2; min-width: 300px; padding: 12px 20px; background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3);">
+                    <div>
+                        <h4 style="color: #f59e0b; font-size:13px; font-weight:600;">⚠️ Correlation Warning Active</h4>
+                        <p style="color: var(--text-secondary); font-size:11px;">BTC/USDT and ETH/USDT are both held open in the same direction.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table id="active-trades-table">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th>Direction</th>
+                            <th>Entry Price</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit</th>
+                            <th>AI Probability</th>
+                            <th>Position Size</th>
+                            <th>Unrealized P&L</th>
+                            <th>Time in Trade</th>
+                        </tr>
+                    </thead>
+                    <tbody id="active-trades-body">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
             <div id="active-trades-empty" class="empty-state">No active trades currently open.</div>
+        </div>
+
+        <!-- Tab: Analytics & Calibration (V8.5 Upgrade) -->
+        <div id="analytics-tab" class="tab-content">
+            <div class="analytics-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="chart-container" style="height: 350px;">
+                    <h3>Reliability Curve (OOS Calibration vs True Win Rate)</h3>
+                    <canvas id="calibrationChart"></canvas>
+                </div>
+                <div class="chart-container" style="height: 350px;">
+                    <h3>Rolling Brier Score Trend (Window = 15)</h3>
+                    <canvas id="brierChart"></canvas>
+                </div>
+            </div>
+
+            <div class="analytics-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                <div class="stat-card">
+                    <p>SHARPE RATIO</p>
+                    <h2 id="anal-sharpe">0.00</h2>
+                    <span style="font-size: 11px; color: var(--text-secondary);">Risk-adjusted return</span>
+                </div>
+                <div class="stat-card">
+                    <p>SORTINO RATIO</p>
+                    <h2 id="anal-sortino">0.00</h2>
+                    <span style="font-size: 11px; color: var(--text-secondary);">Downside deviation metric</span>
+                </div>
+                <div class="stat-card">
+                    <p>MAX DRAWDOWN</p>
+                    <h2 id="anal-max-dd" class="pnl-negative">0.00%</h2>
+                    <span id="anal-max-dd-cash" style="font-size: 11px; color: var(--text-secondary);">$0.00</span>
+                </div>
+                <div class="stat-card">
+                    <p>CURRENT DRAWDOWN</p>
+                    <h2 id="anal-curr-dd">0.00%</h2>
+                    <span style="font-size: 11px; color: var(--text-secondary);">From equity peak</span>
+                </div>
+            </div>
+
+            <div class="funnel-and-health-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="chart-container" style="height: 300px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <h3>Signal Filter Funnel</h3>
+                    <div id="funnel-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                                <span>Signals Generated</span>
+                                <span id="funnel-gen">0</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
+                                <div id="funnel-gen-bar" style="background: var(--color-long); width: 100%; height: 100%;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                                <span>Regime Filter Rejections (Chop/ADX)</span>
+                                <span id="funnel-reg">0</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
+                                <div id="funnel-reg-bar" style="background: var(--color-short); width: 0%; height: 100%;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                                <span>Threshold Rejections (&lt;60%)</span>
+                                <span id="funnel-thresh">0</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
+                                <div id="funnel-thresh-bar" style="background: #f59e0b; width: 0%; height: 100%;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                                <span>Executed Trades</span>
+                                <span id="funnel-exec">0</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
+                                <div id="funnel-exec-bar" style="background: var(--color-win); width: 0%; height: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container" style="height: 300px;">
+                    <h3>Model Health & Retrain Status</h3>
+                    <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 15px; font-size: 13px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Last Retrained:</span>
+                            <strong id="retrain-last">N/A</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Days Since Retrained:</span>
+                            <strong id="retrain-days">N/A</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Active Threshold:</span>
+                            <strong id="active-global-threshold">60.0%</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-secondary);">Calibration Quality:</span>
+                            <span id="calibration-alert-badge" class="badge">Checking...</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Est. Fees Paid:</span>
+                            <strong id="total-fees-paid">$0.00</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Gross P&L:</span>
+                            <strong id="gross-pnl-val" class="pnl-positive">$0.00</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="analytics-sub-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="chart-container" style="height: 350px; overflow-y: auto;">
+                    <h3>Performance by Signal Type</h3>
+                    <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+                        <thead>
+                            <tr>
+                                <th>Signal Type</th>
+                                <th>Trades</th>
+                                <th>Win Rate</th>
+                                <th>Net PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signal-perf-body">
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="chart-container" style="height: 350px;">
+                    <h3>Win Rate by Day of Week</h3>
+                    <canvas id="weeklyPerfChart"></canvas>
+                </div>
+            </div>
         </div>
 
         <!-- Tab: Asset Performance -->
         <div id="asset-performance-tab" class="tab-content">
-            <table id="asset-performance-table">
-                <thead>
-                    <tr>
-                        <th>Asset</th>
-                        <th>Total Trades</th>
-                        <th>Wins</th>
-                        <th>Losses</th>
-                        <th>Win Rate</th>
-                        <th>Net Profit</th>
-                    </tr>
-                </thead>
-                <tbody id="asset-performance-body">
-                    <!-- Dynamic Rows -->
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table id="asset-performance-table">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th>Total Trades</th>
+                            <th>Wins</th>
+                            <th>Losses</th>
+                            <th>Win Rate</th>
+                            <th>Net Profit</th>
+                        </tr>
+                    </thead>
+                    <tbody id="asset-performance-body">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Tab: Penalty Box -->
@@ -420,29 +594,34 @@
 
         <!-- Tab: Trade History -->
         <div id="trade-history-tab" class="tab-content">
-            <table id="trade-history-table">
-                <thead>
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Asset</th>
-                        <th>Direction</th>
-                        <th>Entry Price</th>
-                        <th>Exit Price</th>
-                        <th>Status</th>
-                        <th>AI Probability</th>
-                        <th>PnL ($)</th>
-                    </tr>
-                </thead>
-                <tbody id="trade-history-body">
-                    <!-- Dynamic Rows -->
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table id="trade-history-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Asset</th>
+                            <th>Direction</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>Status</th>
+                            <th>AI Probability</th>
+                            <th>PnL ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trade-history-body">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
         let pnlChart = null;
         let assetChart = null;
+        let calibrationChart = null;
+        let brierChart = null;
+        let weeklyPerfChart = null;
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -458,8 +637,9 @@
                 const stateRes = await fetch('/api/state');
                 const state = await stateRes.json();
                 updateStatusBadge(state);
-                updateActiveTrades(state.active_trades);
+                updateActiveTrades(state.active_trades, state.live_prices);
                 updatePenaltyBox(state.asset_penalty_box);
+                updateSignalFunnel(state.signal_funnel);
 
                 // 2. Fetch Stats
                 const statsRes = await fetch('/api/stats');
@@ -467,12 +647,18 @@
                 updateStatCards(stats);
                 updateAssetPerformanceTable(stats.asset_breakdown);
                 renderAssetChart(stats.asset_breakdown);
+                updateAnalyticsPanel(stats);
+                renderBrierChart(stats.rolling_brier);
+                renderWeeklyPerfChart(stats.weekly_performance);
 
                 // 3. Fetch Trades History
                 const tradesRes = await fetch('/api/trades');
                 const trades = await tradesRes.json();
                 updateTradeHistory(trades);
                 renderPnlChart(trades);
+
+                // 4. Fetch Calibration (OOS Curve)
+                renderCalibrationChart();
 
             } catch (e) {
                 console.error("Dashboard refresh failed: ", e);
@@ -485,14 +671,14 @@
             
             if (state.is_active) {
                 dot.className = "status-dot active";
-                text.innerText = `Active (Last loop: ${state.last_update})`;
+                text.innerText = `Active (Last update: ${state.last_update})`;
             } else {
                 dot.className = "status-dot inactive";
                 text.innerText = `Inactive (Offline / Idle since ${state.last_update || 'N/A'})`;
             }
         }
 
-        function updateActiveTrades(activeTrades) {
+        function updateActiveTrades(activeTrades, livePrices) {
             const body = document.getElementById('active-trades-body');
             const empty = document.getElementById('active-trades-empty');
             const table = document.getElementById('active-trades-table');
@@ -501,13 +687,49 @@
             if (!activeTrades || activeTrades.length === 0) {
                 empty.style.display = 'block';
                 table.style.display = 'none';
+                document.getElementById('total-open-exposure').innerText = '$0.00';
+                document.getElementById('correlation-warning-card').style.display = 'none';
                 return;
             }
             
             empty.style.display = 'none';
             table.style.display = 'table';
             
+            let totalExposure = 0;
+            let hasBtcLong = false, hasEthLong = false;
+            let hasBtcShort = false, hasEthShort = false;
+
             activeTrades.forEach(t => {
+                const currentPrice = (livePrices && livePrices[t.asset]) || t.entry;
+                
+                // Calculate Unrealized PnL
+                let unpnl = 0;
+                if (t.direction === "LONG") {
+                    unpnl = t.position_size * ((currentPrice - t.entry) / t.entry);
+                } else {
+                    unpnl = t.position_size * ((t.entry - currentPrice) / t.entry);
+                }
+                
+                // Calculate Time in Trade
+                let durationStr = "N/A";
+                if (t.entry_time) {
+                    const elapsedSec = Math.floor(Date.now() / 1000 - t.entry_time);
+                    const h = Math.floor(elapsedSec / 3600);
+                    const m = Math.floor((elapsedSec % 3600) / 60);
+                    durationStr = `${h}h ${m}m`;
+                }
+                
+                totalExposure += t.position_size;
+                
+                if (t.asset === "BTC/USDT") {
+                    if (t.direction === "LONG") hasBtcLong = true;
+                    else hasBtcShort = true;
+                }
+                if (t.asset === "ETH/USDT") {
+                    if (t.direction === "LONG") hasEthLong = true;
+                    else hasEthShort = true;
+                }
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><strong>${t.asset}</strong></td>
@@ -517,9 +739,19 @@
                     <td>$${t.tp.toFixed(4)}</td>
                     <td>${t.ai_prob.toFixed(2)}%</td>
                     <td>$${t.position_size.toFixed(2)}</td>
+                    <td><span class="${unpnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${unpnl >= 0 ? '+' : ''}$${unpnl.toFixed(2)}</span></td>
+                    <td>${durationStr}</td>
                 `;
                 body.appendChild(tr);
             });
+
+            document.getElementById('total-open-exposure').innerText = `$${totalExposure.toFixed(2)}`;
+            
+            if ((hasBtcLong && hasEthLong) || (hasBtcShort && hasEthShort)) {
+                document.getElementById('correlation-warning-card').style.display = 'flex';
+            } else {
+                document.getElementById('correlation-warning-card').style.display = 'none';
+            }
         }
 
         function updatePenaltyBox(penaltyBox) {
@@ -535,7 +767,8 @@
             
             empty.style.display = 'none';
             assets.forEach(a => {
-                const expiry = new Date(penaltyBox[a] * 1000).toLocaleTimeString();
+                // 🟢 V8.5 date formatting using Sweden/Stockholm YYYY-MM-DD HH:MM:SS style locale
+                const expiry = new Date(penaltyBox[a] * 1000).toLocaleString('sv-SE');
                 const card = document.createElement('div');
                 card.className = 'penalty-card';
                 card.innerHTML = `
@@ -543,7 +776,7 @@
                         <h4>${a}</h4>
                         <p>Performance Block Active</p>
                     </div>
-                    <span class="badge badge-loss">Expires: ${expiry}</span>
+                    <span class="badge badge-loss" style="font-size:10px;">Expires: ${expiry}</span>
                 `;
                 body.appendChild(card);
             });
@@ -551,8 +784,8 @@
 
         function updateStatCards(stats) {
             const pnlEl = document.getElementById('stat-total-pnl');
-            pnlEl.innerText = `$${stats.total_pnl.toFixed(2)}`;
-            pnlEl.className = stats.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            pnlEl.innerText = `$${stats.net_pnl.toFixed(2)}`; // Use Net profit after fees
+            pnlEl.className = stats.net_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
             
             document.getElementById('stat-win-rate').innerText = `${stats.win_rate.toFixed(2)}%`;
             document.getElementById('stat-total-trades').innerText = stats.total_trades;
@@ -609,7 +842,6 @@
         function renderPnlChart(trades) {
             if (!trades || trades.length === 0) return;
             
-            // Calculate cumulative PnL forward in time
             const sortedTrades = [...trades].reverse();
             let cumulative = 0;
             const labels = [];
@@ -661,10 +893,13 @@
 
         function renderAssetChart(breakdown) {
             const assets = Object.keys(breakdown || {}).sort();
+            
+            // 🟢 V8.5 Win Rate chart labels including sample sizes (N=...)
+            const labels = assets.map(a => `${a} (N=${breakdown[a].trades})`);
             const winRates = assets.map(a => breakdown[a].win_rate);
             
             if (assetChart) {
-                assetChart.data.labels = assets;
+                assetChart.data.labels = labels;
                 assetChart.data.datasets[0].data = winRates;
                 assetChart.update();
                 return;
@@ -674,7 +909,7 @@
             assetChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: assets,
+                    labels: labels,
                     datasets: [{
                         data: winRates,
                         backgroundColor: 'rgba(59, 130, 246, 0.55)',
@@ -696,6 +931,218 @@
                     }
                 }
             });
+        }
+
+        async function renderCalibrationChart() {
+            try {
+                const res = await fetch('/api/calibration');
+                const meta = await res.json();
+                if (!meta || Object.keys(meta).length === 0) return;
+                
+                // Show representative BTC/USDT calibration curve
+                const assetName = "BTC/USDT";
+                const assetMeta = meta[assetName];
+                if (!assetMeta || !assetMeta.long_reliability) return;
+                
+                const longRel = assetMeta.long_reliability;
+                const labels = longRel.map(pt => `${(pt.bin_midpoint * 100).toFixed(0)}%`);
+                const predWinRates = longRel.map(pt => pt.pred_win_rate);
+                const trueWinRates = longRel.map(pt => pt.true_frequency * 100);
+                
+                // Compute calibration alert (gap)
+                let maxGap = 0;
+                longRel.forEach(pt => {
+                    const gap = Math.abs(pt.pred_win_rate - pt.true_frequency * 100);
+                    if (gap > maxGap) maxGap = gap;
+                });
+                
+                const alertBadge = document.getElementById('calibration-alert-badge');
+                if (maxGap > 10.0) {
+                    alertBadge.className = "badge badge-loss";
+                    alertBadge.innerText = `Overconfident (Gap: ${maxGap.toFixed(1)}%)`;
+                } else {
+                    alertBadge.className = "badge badge-win";
+                    alertBadge.innerText = `Well Calibrated (Gap: ${maxGap.toFixed(1)}%)`;
+                }
+                
+                // Set training timestamp
+                if (assetMeta.last_trained) {
+                    document.getElementById('retrain-last').innerText = assetMeta.last_trained;
+                    const trainDate = new Date(assetMeta.last_trained);
+                    const diffTime = Math.abs(new Date() - trainDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    document.getElementById('retrain-days').innerText = `${diffDays} days ago`;
+                }
+
+                if (calibrationChart) {
+                    calibrationChart.data.labels = labels;
+                    calibrationChart.data.datasets[0].data = predWinRates;
+                    calibrationChart.data.datasets[1].data = trueWinRates;
+                    calibrationChart.update();
+                    return;
+                }
+                
+                const ctx = document.getElementById('calibrationChart').getContext('2d');
+                calibrationChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Predicted Probability',
+                                data: predWinRates,
+                                borderColor: '#3b82f6',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                fill: false,
+                                tension: 0.1
+                            },
+                            {
+                                label: 'Actual Win Rate',
+                                data: trueWinRates,
+                                borderColor: '#10b981',
+                                borderWidth: 2,
+                                backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                                fill: true,
+                                tension: 0.2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { color: '#9ca3af' } },
+                            y: { min: 40, max: 100, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af', callback: v => v + '%' } }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error("Calibration load failed: ", e);
+            }
+        }
+
+        function renderBrierChart(rollingBrier) {
+            if (!rollingBrier || rollingBrier.length === 0) return;
+            const labels = rollingBrier.map(pt => `Trade ${pt.trade_index}`);
+            const brierVals = rollingBrier.map(pt => pt.brier);
+            
+            if (brierChart) {
+                brierChart.data.labels = labels;
+                brierChart.data.datasets[0].data = brierVals;
+                brierChart.update();
+                return;
+            }
+            
+            const ctx = document.getElementById('brierChart').getContext('2d');
+            brierChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Brier Score (Rolling)',
+                        data: brierVals,
+                        borderColor: '#f43f5e',
+                        borderWidth: 1.5,
+                        backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { display: false } },
+                        y: { min: 0, max: 0.4, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        }
+
+        function renderWeeklyPerfChart(weeklyPerf) {
+            const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const winRates = days.map(d => weeklyPerf[d] ? weeklyPerf[d].win_rate : 0.0);
+            
+            if (weeklyPerfChart) {
+                weeklyPerfChart.data.datasets[0].data = winRates;
+                weeklyPerfChart.update();
+                return;
+            }
+            
+            const ctx = document.getElementById('weeklyPerfChart').getContext('2d');
+            weeklyPerfChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: days.map(d => d.substring(0, 3)),
+                    datasets: [{
+                        data: winRates,
+                        backgroundColor: 'rgba(16, 185, 129, 0.65)',
+                        borderColor: '#10b981',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                        y: { min: 0, max: 100, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af', callback: v => v + '%' } }
+                    }
+                }
+            });
+        }
+
+        function updateAnalyticsPanel(stats) {
+            document.getElementById('anal-sharpe').innerText = stats.sharpe.toFixed(2);
+            document.getElementById('anal-sortino').innerText = stats.sortino.toFixed(2);
+            document.getElementById('anal-max-dd').innerText = `${stats.max_drawdown_pct.toFixed(2)}%`;
+            document.getElementById('anal-max-dd-cash').innerText = `-$${stats.max_drawdown_dollars.toFixed(2)}`;
+            document.getElementById('anal-curr-dd').innerText = `${stats.current_drawdown_pct.toFixed(2)}%`;
+            
+            document.getElementById('total-fees-paid').innerText = `$${stats.total_fees.toFixed(2)}`;
+            document.getElementById('gross-pnl-val').innerText = `$${stats.total_pnl.toFixed(2)}`;
+            document.getElementById('gross-pnl-val').className = stats.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            
+            // Signal Type Performance table
+            const signalBody = document.getElementById('signal-perf-body');
+            signalBody.innerHTML = '';
+            const sp = stats.signal_performance || {};
+            Object.keys(sp).forEach(st => {
+                const row = sp[st];
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${st}</strong></td>
+                    <td>${row.trades}</td>
+                    <td>${row.win_rate.toFixed(2)}%</td>
+                    <td><span class="${row.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${row.pnl.toFixed(2)}</span></td>
+                `;
+                signalBody.appendChild(tr);
+            });
+        }
+
+        function updateSignalFunnel(funnel) {
+            if (!funnel) return;
+            const gen = funnel.generated || 1;
+            const reg = funnel.rejected_regime || 0;
+            const thresh = funnel.rejected_threshold || 0;
+            const exec = funnel.executed || 0;
+            
+            document.getElementById('funnel-gen').innerText = gen;
+            document.getElementById('funnel-reg').innerText = reg;
+            document.getElementById('funnel-thresh').innerText = thresh;
+            document.getElementById('funnel-exec').innerText = exec;
+            
+            const regPct = gen > 0 ? (reg / gen) * 100 : 0;
+            const threshPct = gen > 0 ? (thresh / gen) * 100 : 0;
+            const execPct = gen > 0 ? (exec / gen) * 100 : 0;
+            
+            document.getElementById('funnel-gen-bar').style.width = '100%';
+            document.getElementById('funnel-reg-bar').style.width = `${regPct}%`;
+            document.getElementById('funnel-thresh-bar').style.width = `${threshPct}%`;
+            document.getElementById('funnel-exec-bar').style.width = `${execPct}%`;
         }
 
         // Fetch on boot, and refresh every 10 seconds

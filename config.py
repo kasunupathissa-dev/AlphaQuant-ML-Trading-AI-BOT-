@@ -28,7 +28,14 @@ TARGET_ASSETS = [
 ]
 
 # --- ML Model & Trading Parameters ---
-MODEL_CONFIDENCE_THRESHOLD = 55.0  # Minimum probability to consider a trade
+# 🟢 V8.5 Upgrade: System timezone synchronization & estimated transaction fee percentage
+TIMEZONE = "Europe/Stockholm"
+ESTIMATED_FEE_PCT = 0.0008
+
+# 🟢 V8.4 Upgrade: Raised to 60.0% based on consistent out-of-sample calibration pattern.
+# This filters out the overconfident 50-60% bins across all assets.
+MODEL_CONFIDENCE_THRESHOLD = 60.0  
+
 ATR_STOP_LOSS_MULTIPLIER = 1.0     # Optimized baseline for SL
 ATR_TAKE_PROFIT_MULTIPLIER = 1.5    # Optimized baseline for TP
 MAX_PRICE_DEVIATION_PCT = 0.005    # Max price deviation (0.5%) to prevent chasing extended entries

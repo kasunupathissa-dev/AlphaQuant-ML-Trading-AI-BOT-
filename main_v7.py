@@ -11,6 +11,10 @@ from datetime import datetime
 import json
 import ccxt
 import sys
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
 
 # 🟢 V8.2 Upgrade: JSON Serialization Fix
 import config 
@@ -29,6 +33,19 @@ active_trades, live_prices, asset_locks, brains = [], {}, {}, {}
 telemetry_timer = time.time() 
 asset_recent_results = {asset: [] for asset in config.TARGET_ASSETS} 
 asset_penalty_box = {} 
+signal_funnel = {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0}
+
+def get_local_time():
+    """Returns the current datetime in the Stockholm timezone (or fallback UTC+2)."""
+    tz_name = getattr(config, 'TIMEZONE', 'Europe/Stockholm')
+    if ZoneInfo is not None:
+        try:
+            return datetime.now(ZoneInfo(tz_name))
+        except Exception:
+            pass
+    # Fallback to Stockholm summer time (UTC+2)
+    from datetime import timezone, timedelta
+    return datetime.now(timezone.utc) + timedelta(hours=2)
 
 # 🟢 V8.2 FIX: Custom JSON encoder to handle NumPy data types
 class NumpyEncoder(json.JSONEncoder):
@@ -43,20 +60,27 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 def save_state():
-    state = {"asset_penalty_box": asset_penalty_box, "asset_recent_results": asset_recent_results, "active_trades": active_trades}
+    state = {
+        "asset_penalty_box": asset_penalty_box,
+        "asset_recent_results": asset_recent_results,
+        "active_trades": active_trades,
+        "signal_funnel": signal_funnel,
+        "live_prices": live_prices
+    }
     with open(config.STATE_FILE, 'w') as f:
         # Use the custom NumpyEncoder to prevent type errors
         json.dump(state, f, indent=4, cls=NumpyEncoder)
     print("[INFO] Bot state saved.")
 
 def load_state():
-    global asset_penalty_box, asset_recent_results, active_trades
+    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel
     if os.path.exists(config.STATE_FILE):
         try:
             with open(config.STATE_FILE, 'r') as f: state = json.load(f)
             asset_penalty_box = state.get("asset_penalty_box", {})
             asset_recent_results = state.get("asset_recent_results", {asset: [] for asset in config.TARGET_ASSETS})
             active_trades = state.get("active_trades", [])
+            signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
             print("[SUCCESS] Bot state loaded from file.")
         except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
     else: print("[INFO] No state file found. Starting fresh.")
@@ -87,7 +111,7 @@ def log_trade_to_csv(trade):
     with open(config.LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists: writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
-        writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), trade["asset"], trade["direction"], f"{trade['entry']:.4f}", f"{trade['tp']:.4f}", f"{trade['sl']:.4f}", trade["status"], f"{trade['ai_prob']:.2f}%", f"{trade['pnl']:.2f}", "SHOTGUN"])
+        writer.writerow([get_local_time().strftime("%Y-%m-%d %H:%M:%S"), trade["asset"], trade["direction"], f"{trade['entry']:.4f}", f"{trade['tp']:.4f}", f"{trade['sl']:.4f}", trade["status"], f"{trade['ai_prob']:.2f}%", f"{trade['pnl']:.2f}", "SHOTGUN"])
 
 class AlphaQuantV8_2:
     def __init__(self):
@@ -276,6 +300,10 @@ class AlphaQuantV8_2:
                         
                         if prediction == 2: continue
 
+                        # 🟢 V8.5 Funnel: Increment generated signal count
+                        signal_funnel["generated"] += 1
+                        save_state()
+
                         direction = "LONG" if prediction == 1 else "SHORT"
                         win_prob = probabilities[prediction] * 100
                         
@@ -289,6 +317,9 @@ class AlphaQuantV8_2:
                             
                             if last_chop > 61.8 and last_adx < 20:
                                 print(f"[REJECT] {asset} signal rejected. Market is in Chop/Sideways regime (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20).")
+                                # 🟢 V8.5 Funnel: Increment regime rejection counter
+                                signal_funnel["rejected_regime"] += 1
+                                save_state()
                                 continue
                                 
                             # 🟢 V8.4 Correlation Check: Avoid simultaneous LONG/SHORT in highly correlated assets (BTC & ETH)
@@ -324,8 +355,28 @@ class AlphaQuantV8_2:
                             target_risk = 10.0
                             position_size = (target_risk / abs(entry_price - sl)) * entry_price
                             
-                            active_trades.append({"asset": asset, "direction": direction, "entry": entry_price, "sl": sl, "tp": tp, "status": "OPEN", "ai_prob": win_prob, "position_size": position_size, "pnl": 0.0})
+                            # 🟢 V8.5 Funnel: Increment executed counter
+                            signal_funnel["executed"] += 1
+                            
+                            # 🟢 V8.5 Dynamic Signal Classification (Trend vs Reversion)
+                            dist_50 = last_closed['dist_ema_50']
+                            if (direction == "LONG" and dist_50 > 0) or (direction == "SHORT" and dist_50 < 0):
+                                signal_type = "TREND"
+                            else:
+                                signal_type = "REVERSION"
+                            
+                            # 🟢 V8.5 active_trades metadata: Include entry_time (timestamp) and signal_type
+                            active_trades.append({
+                                "asset": asset, "direction": direction, "entry": entry_price, "sl": sl, "tp": tp, 
+                                "status": "OPEN", "ai_prob": win_prob, "position_size": position_size, "pnl": 0.0,
+                                "entry_time": time.time(),
+                                "signal_type": signal_type
+                            })
                             asset_locks[asset] = True
+                            save_state()
+                        else:
+                            # 🟢 V8.5 Funnel: Increment threshold rejection counter
+                            signal_funnel["rejected_threshold"] += 1
                             save_state()
                             
                             rr_ratio = config.ATR_TAKE_PROFIT_MULTIPLIER / config.ATR_STOP_LOSS_MULTIPLIER

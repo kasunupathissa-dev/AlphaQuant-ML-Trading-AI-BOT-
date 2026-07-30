@@ -6,6 +6,28 @@ import csv
 import sys
 from datetime import datetime
 
+# 🟢 V8.5 Upgrade: Import config and zoneinfo for Stockholm timezone handling
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import config
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
+
+def format_timestamp_stockholm(ts):
+    """Formats a unix timestamp into Stockholm timezone."""
+    tz_name = getattr(config, 'TIMEZONE', 'Europe/Stockholm')
+    if ZoneInfo is not None:
+        try:
+            return datetime.fromtimestamp(ts, ZoneInfo(tz_name)).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+    # Fallback: manually offset to Stockholm summer time (UTC+2)
+    from datetime import timezone, timedelta
+    utc_dt = datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None)
+    return (utc_dt + timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
+
 PORT = 8080
 if len(sys.argv) > 1:
     try:
@@ -45,7 +67,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     last_mod = os.path.getmtime(STATE_FILE)
                     is_active = (datetime.now().timestamp() - last_mod) < 120
                     state_data["is_active"] = is_active
-                    state_data["last_update"] = datetime.fromtimestamp(last_mod).strftime("%Y-%m-%d %H:%M:%S")
+                    state_data["last_update"] = format_timestamp_stockholm(last_mod)
                     self.send_json(state_data)
                 except Exception as e:
                     self.send_json({"error": f"Failed to load state: {str(e)}"}, 500)
@@ -101,18 +123,27 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 "losses": 0,
                 "win_rate": 0.0,
                 "total_pnl": 0.0,
+                "total_fees": 0.0,
+                "net_pnl": 0.0,
                 "avg_win": 0.0,
                 "avg_loss": 0.0,
                 "profit_factor": 0.0,
+                "sharpe": 0.0,
+                "sortino": 0.0,
+                "max_drawdown_pct": 0.0,
+                "max_drawdown_dollars": 0.0,
+                "current_drawdown_pct": 0.0,
+                "overall_brier": 0.0,
+                "rolling_brier": [],
+                "hourly_performance": {},
+                "weekly_performance": {},
+                "signal_performance": {},
                 "asset_breakdown": {}
             }
             
             if os.path.exists(LOG_FILE):
                 try:
-                    pnl_list = []
-                    wins_list = []
-                    losses_list = []
-                    asset_data = {}
+                    trades_list = []
                     
                     with open(LOG_FILE, mode='r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
@@ -122,51 +153,203 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                 pnl = float(row.get('pnl', 0.0))
                                 status = row.get('status', 'LOSS').upper()
                                 asset = row.get('asset', 'UNKNOWN')
+                                entry = float(row.get('entry', 0.0))
+                                sl = float(row.get('sl', 0.0))
+                                win_prob = float(str(row.get('win_prob', '0')).replace('%', '').strip())
+                                sig_type = row.get('signaltype', 'TREND').upper()
+                                timestamp = row.get('timestamp', '')
                                 
-                                stats["total_trades"] += 1
-                                stats["total_pnl"] += pnl
-                                pnl_list.append(pnl)
+                                is_win = "PROFIT" in status or "WIN" in status
                                 
-                                if "PROFIT" in status or "WIN" in status:
-                                    stats["wins"] += 1
-                                    wins_list.append(pnl)
-                                else:
-                                    stats["losses"] += 1
-                                    losses_list.append(pnl)
-                                    
-                                # Asset Breakdown
-                                if asset not in asset_data:
-                                    asset_data[asset] = {"trades": 0, "wins": 0, "pnl": 0.0}
-                                asset_data[asset]["trades"] += 1
-                                asset_data[asset]["pnl"] += pnl
-                                if "PROFIT" in status or "WIN" in status:
-                                    asset_data[asset]["wins"] += 1
-                                    
-                            except (ValueError, KeyError):
+                                # Estimate position size: risk / SL distance * entry
+                                sl_dist = abs(entry - sl)
+                                psize = (10.0 / sl_dist) * entry if sl_dist > 1e-6 else 0.0
+                                estimated_fee = psize * getattr(config, 'ESTIMATED_FEE_PCT', 0.0008)
+                                net_pnl_val = pnl - estimated_fee
+                                
+                                trades_list.append({
+                                    "asset": asset,
+                                    "pnl": pnl,
+                                    "net_pnl": net_pnl_val,
+                                    "is_win": is_win,
+                                    "win_prob": win_prob,
+                                    "position_size": psize,
+                                    "fee": estimated_fee,
+                                    "signal_type": sig_type,
+                                    "timestamp": timestamp
+                                })
+                            except Exception:
                                 continue
                                 
-                    if stats["total_trades"] > 0:
-                        stats["win_rate"] = round((stats["wins"] / stats["total_trades"]) * 100, 2)
+                    total_trades = len(trades_list)
+                    if total_trades > 0:
+                        stats["total_trades"] = total_trades
                         
-                    if wins_list:
-                        stats["avg_win"] = round(sum(wins_list) / len(wins_list), 4)
-                    if losses_list:
-                        stats["avg_loss"] = round(sum(losses_list) / len(losses_list), 4)
+                        pnl_vals = [t["pnl"] for t in trades_list]
+                        net_pnl_vals = [t["net_pnl"] for t in trades_list]
+                        wins_list = [t["pnl"] for t in trades_list if t["is_win"]]
+                        losses_list = [t["pnl"] for t in trades_list if not t["is_win"]]
                         
-                    sum_wins = sum(wins_list)
-                    sum_losses = abs(sum(losses_list))
-                    stats["profit_factor"] = round(sum_wins / sum_losses, 2) if sum_losses > 0 else (round(sum_wins, 2) if sum_wins > 0 else 0.0)
-                    
-                    for asset, d in asset_data.items():
-                        d["win_rate"] = round((d["wins"] / d["trades"]) * 100, 2) if d["trades"] > 0 else 0.0
-                        d["pnl"] = round(d["pnl"], 4)
-                    stats["asset_breakdown"] = asset_data
-                    
+                        stats["wins"] = len(wins_list)
+                        stats["losses"] = len(losses_list)
+                        stats["win_rate"] = round((stats["wins"] / total_trades) * 100, 2)
+                        stats["total_pnl"] = round(sum(pnl_vals), 4)
+                        stats["total_fees"] = round(sum(t["fee"] for t in trades_list), 4)
+                        stats["net_pnl"] = round(stats["total_pnl"] - stats["total_fees"], 4)
+                        
+                        if wins_list:
+                            stats["avg_win"] = round(sum(wins_list) / len(wins_list), 4)
+                        if losses_list:
+                            stats["avg_loss"] = round(sum(losses_list) / len(losses_list), 4)
+                            
+                        sum_wins = sum(wins_list)
+                        sum_losses = abs(sum(losses_list))
+                        stats["profit_factor"] = round(sum_wins / sum_losses, 2) if sum_losses > 0 else (round(sum_wins, 2) if sum_wins > 0 else 0.0)
+                        
+                        # 🟢 Sharpe & Sortino computations
+                        net_returns = []
+                        for t in trades_list:
+                            if t["position_size"] > 0:
+                                net_returns.append(t["net_pnl"] / t["position_size"])
+                            else:
+                                net_returns.append(0.0)
+                                
+                        def std_dev(lst):
+                            if len(lst) < 2: return 0.0
+                            mean = sum(lst) / len(lst)
+                            variance = sum((x - mean) ** 2 for x in lst) / (len(lst) - 1)
+                            return variance ** 0.5
+                            
+                        mean_ret = sum(net_returns) / len(net_returns)
+                        std_ret = std_dev(net_returns)
+                        stats["sharpe"] = round(mean_ret / std_ret, 4) if std_ret > 0 else 0.0
+                        
+                        downside_rets = [r for r in net_returns if r < 0]
+                        std_downside = std_dev(downside_rets)
+                        stats["sortino"] = round(mean_ret / std_downside, 4) if std_downside > 0 else 0.0
+                        
+                        # 🟢 Drawdown calculations
+                        initial_balance = 10000.0
+                        current_equity = initial_balance
+                        peak = initial_balance
+                        max_dd_dollars = 0.0
+                        max_dd_pct = 0.0
+                        
+                        for t in trades_list:
+                            current_equity += t["net_pnl"]
+                            if current_equity > peak:
+                                peak = current_equity
+                            dd_dollars = peak - current_equity
+                            dd_pct = (dd_dollars / peak) * 100.0
+                            if dd_pct > max_dd_pct:
+                                max_dd_pct = dd_pct
+                                max_dd_dollars = dd_dollars
+                                
+                        stats["max_drawdown_pct"] = round(max_dd_pct, 2)
+                        stats["max_drawdown_dollars"] = round(max_dd_dollars, 2)
+                        stats["current_drawdown_pct"] = round(((peak - current_equity) / peak) * 100.0, 2)
+                        
+                        # 🟢 Calibration & Brier Score
+                        sq_errors = []
+                        for t in trades_list:
+                            label = 1 if t["is_win"] else 0
+                            p = t["win_prob"] / 100.0
+                            sq_errors.append((p - label) ** 2)
+                        stats["overall_brier"] = round(sum(sq_errors) / len(sq_errors), 4) if sq_errors else 0.0
+                        
+                        # Rolling Brier Score (window = 15)
+                        window = 15
+                        rolling_brier = []
+                        for k in range(len(trades_list)):
+                            if k >= window - 1:
+                                sub = trades_list[k - window + 1:k + 1]
+                                errors = [(t["win_prob"]/100.0 - (1 if t["is_win"] else 0))**2 for t in sub]
+                                rolling_brier.append({"trade_index": k + 1, "brier": round(sum(errors)/len(errors), 4)})
+                        stats["rolling_brier"] = rolling_brier
+                        
+                        # 🟢 Time-based analytics
+                        hourly_perf = {h: {"trades": 0, "wins": 0, "pnl": 0.0, "win_rate": 0.0} for h in range(24)}
+                        weekly_perf = {d: {"trades": 0, "wins": 0, "pnl": 0.0, "win_rate": 0.0} for d in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}
+                        
+                        for t in trades_list:
+                            try:
+                                dt = datetime.strptime(t["timestamp"], "%Y-%m-%d %H:%M:%S")
+                                h = dt.hour
+                                d = dt.strftime("%A")
+                                if h in hourly_perf:
+                                    hourly_perf[h]["trades"] += 1
+                                    hourly_perf[h]["pnl"] += t["net_pnl"]
+                                    if t["is_win"]: hourly_perf[h]["wins"] += 1
+                                if d in weekly_perf:
+                                    weekly_perf[d]["trades"] += 1
+                                    weekly_perf[d]["pnl"] += t["net_pnl"]
+                                    if t["is_win"]: weekly_perf[d]["wins"] += 1
+                            except Exception:
+                                pass
+                                
+                        for h in hourly_perf:
+                            tc = hourly_perf[h]["trades"]
+                            hourly_perf[h]["win_rate"] = round((hourly_perf[h]["wins"] / tc) * 100, 2) if tc > 0 else 0.0
+                            hourly_perf[h]["pnl"] = round(hourly_perf[h]["pnl"], 4)
+                        for d in weekly_perf:
+                            tc = weekly_perf[d]["trades"]
+                            weekly_perf[d]["win_rate"] = round((weekly_perf[d]["wins"] / tc) * 100, 2) if tc > 0 else 0.0
+                            weekly_perf[d]["pnl"] = round(weekly_perf[d]["pnl"], 4)
+                            
+                        stats["hourly_performance"] = hourly_perf
+                        stats["weekly_performance"] = weekly_perf
+                        
+                        # 🟢 Signal Performance
+                        signal_perf = {
+                            "TREND": {"trades": 0, "wins": 0, "pnl": 0.0, "win_rate": 0.0},
+                            "REVERSION": {"trades": 0, "wins": 0, "pnl": 0.0, "win_rate": 0.0}
+                        }
+                        for t in trades_list:
+                            st = t["signal_type"]
+                            if st not in ("TREND", "REVERSION"):
+                                st = "TREND"
+                            signal_perf[st]["trades"] += 1
+                            signal_perf[st]["pnl"] += t["net_pnl"]
+                            if t["is_win"]: signal_perf[st]["wins"] += 1
+                            
+                        for st in signal_perf:
+                            tc = signal_perf[st]["trades"]
+                            signal_perf[st]["win_rate"] = round((signal_perf[st]["wins"] / tc) * 100, 2) if tc > 0 else 0.0
+                            signal_perf[st]["pnl"] = round(signal_perf[st]["pnl"], 4)
+                        stats["signal_performance"] = signal_perf
+                        
+                        # 🟢 Asset breakdown
+                        asset_data = {}
+                        for t in trades_list:
+                            asset = t["asset"]
+                            if asset not in asset_data:
+                                asset_data[asset] = {"trades": 0, "wins": 0, "pnl": 0.0, "win_rate": 0.0}
+                            asset_data[asset]["trades"] += 1
+                            asset_data[asset]["pnl"] += t["net_pnl"]
+                            if t["is_win"]: asset_data[asset]["wins"] += 1
+                            
+                        for asset, d in asset_data.items():
+                            d["win_rate"] = round((d["wins"] / d["trades"]) * 100, 2) if d["trades"] > 0 else 0.0
+                            d["pnl"] = round(d["pnl"], 4)
+                        stats["asset_breakdown"] = asset_data
+                        
                     self.send_json(stats)
                 except Exception as e:
                     self.send_json({"error": f"Failed to compute statistics: {str(e)}"}, 500)
             else:
                 self.send_json(stats)
+
+        # 🟢 V8.5 API Endpoint: Calibration reliability curves
+        elif self.path == '/api/calibration':
+            if os.path.exists("model_metadata.json"):
+                try:
+                    with open("model_metadata.json", 'r') as f:
+                        meta = json.load(f)
+                    self.send_json(meta)
+                except Exception as e:
+                    self.send_json({"error": f"Failed to load calibration data: {str(e)}"}, 500)
+            else:
+                self.send_json({})
 
         # 4. Static Page: index.html
         elif self.path in ('/', '/index.html'):
