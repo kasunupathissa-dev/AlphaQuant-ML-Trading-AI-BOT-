@@ -40,7 +40,13 @@ def train_shotgun_models():
             continue
         
         df.dropna(subset=['target_label'], inplace=True)
-        # df = df[df['target_label'] != 2].copy()
+        # 🟢 V8.5 Upgrade: Dynamically drop rare classes (<3 samples) to prevent CV splitter crashes
+        class_counts = df['target_label'].value_counts()
+        rare_classes = class_counts[class_counts < 3].index
+        if len(rare_classes) > 0:
+            print(f"  [CLEANUP] Dropping rare classes {list(rare_classes)} with <3 samples.")
+            df = df[~df['target_label'].isin(rare_classes)].copy()
+            
         df['target_label'] = df['target_label'].astype(int)
         
         if len(df) < 100 or df['target_label'].nunique() < 2:
@@ -60,15 +66,26 @@ def train_shotgun_models():
         print(f"  [DEBUG] Weight range: min={weights.min():.2f}, max={weights.max():.2f}")
         print(f"  [DEBUG] Class distribution in y_train: {y_train.value_counts().to_dict()}")
 
+        num_classes = df['target_label'].nunique()
+        if num_classes == 2:
+            objective = 'binary:logistic'
+            eval_metric = 'logloss'
+            num_class_param = {}
+        else:
+            objective = 'multi:softprob'
+            eval_metric = 'mlogloss'
+            num_class_param = {'num_class': num_classes}
+
         base_model = xgb.XGBClassifier(
-            objective='multi:softprob',
-            num_class=3,
+            objective=objective,
             n_estimators=500,
             learning_rate=0.05,
             max_depth=4,
             subsample=0.8,
             colsample_bytree=0.8,
-            eval_metric='mlogloss'
+            eval_metric=eval_metric,
+            random_state=42,
+            **num_class_param
         )
 
         # Wrap in calibration model (Isotonic Regression)
