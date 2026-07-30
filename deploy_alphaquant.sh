@@ -14,6 +14,18 @@ fi
 REPO_DIR="/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-"
 PORT=8080
 
+# 🟢 V8.4 Upgrade: Detect virtual environment dynamically to avoid ModuleNotFoundErrors in Systemd
+if [ -f "$REPO_DIR/aq_env/bin/python3" ]; then
+  PYTHON_BIN="$REPO_DIR/aq_env/bin/python3"
+  echo "[INFO] Found virtual environment. Using python: $PYTHON_BIN"
+elif [ -f "$REPO_DIR/.venv/bin/python3" ]; then
+  PYTHON_BIN="$REPO_DIR/.venv/bin/python3"
+  echo "[INFO] Found .venv environment. Using python: $PYTHON_BIN"
+else
+  PYTHON_BIN="/usr/bin/python3"
+  echo "[WARNING] No virtual environment found. Using system python: $PYTHON_BIN"
+fi
+
 echo "=================================================="
 echo " Starting Full AlphaQuant System Deployment..."
 echo "=================================================="
@@ -34,7 +46,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=$REPO_DIR
-ExecStart=/usr/bin/python3 main_v7.py
+ExecStart=$PYTHON_BIN main_v7.py
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
@@ -53,7 +65,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=$REPO_DIR
-ExecStart=/usr/bin/python3 dashboard_app.py $PORT
+ExecStart=$PYTHON_BIN dashboard_app.py $PORT
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
@@ -72,7 +84,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=$REPO_DIR
-ExecStart=/usr/bin/python3 auto_trainer_daemon.py
+ExecStart=$PYTHON_BIN auto_trainer_daemon.py
 Restart=always
 RestartSec=30
 Environment=PYTHONUNBUFFERED=1
