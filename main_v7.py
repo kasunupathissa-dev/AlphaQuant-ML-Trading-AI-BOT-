@@ -252,7 +252,12 @@ class AlphaQuantV8_2:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Executing V8.2 Shotgun Pipeline...")
 
                 for asset in brains.keys():
-                    if asset in asset_penalty_box and time.time() < asset_penalty_box[asset]: continue
+                    if asset in asset_penalty_box:
+                        if time.time() >= asset_penalty_box[asset]:
+                            del asset_penalty_box[asset]
+                            save_state()
+                        else:
+                            continue
                     if asset_locks.get(asset, False): continue
                     
                     try:

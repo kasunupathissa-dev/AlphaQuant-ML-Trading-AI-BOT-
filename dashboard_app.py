@@ -68,6 +68,13 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     is_active = (datetime.now().timestamp() - last_mod) < 120
                     state_data["is_active"] = is_active
                     state_data["last_update"] = format_timestamp_stockholm(last_mod)
+                    
+                    # 🟢 V8.5 Upgrade: Automatically prune expired assets from penalty box before sending to frontend
+                    pb = state_data.get("asset_penalty_box", {})
+                    current_time = datetime.now().timestamp()
+                    pruned_pb = {k: v for k, v in pb.items() if v > current_time}
+                    state_data["asset_penalty_box"] = pruned_pb
+                    
                     self.send_json(state_data)
                 except Exception as e:
                     self.send_json({"error": f"Failed to load state: {str(e)}"}, 500)
