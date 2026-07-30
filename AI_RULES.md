@@ -33,3 +33,9 @@ This document outlines the rules and directives for any AI assistant working on 
 12. **Check Async Safety:** Ensure that no blocking I/O calls (`time.sleep`, `requests.get`) are used within `async def` functions.
 
 13. **Check Exception Handling:** Verify that all network calls and file I/O operations are wrapped in appropriate `try...except` blocks.
+
+## Pandas 3.0 Compatibility Directives
+
+14. **No Uppercase Resample Aliases:** Never use uppercase frequency aliases (e.g., `resample('1H')`, `resample('T')`, `resample('S')`) which are deprecated/removed in Pandas 3.0. Always use lowercase counterparts: `resample('1h')`, `resample('1min')`, `resample('1s')`.
+
+15. **No Chained Inplace Assignments:** Never use chained inplace assignments (e.g., `df['col'].fillna(..., inplace=True)`). Perform assignments directly (e.g., `df['col'] = df['col'].fillna(...)`) to prevent runtime errors in Pandas 3.0.
