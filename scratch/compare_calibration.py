@@ -1,7 +1,9 @@
 import sys
 import os
-# Add the project root to sys.path to resolve imports
-sys.path.append("c:/cry_agent/v_4_AQ_AI")
+# Dynamically resolve and add project root to sys.path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.append(project_root)
 
 import pandas as pd
 import numpy as np
@@ -91,8 +93,11 @@ def compare_calibration():
     print("   ALPHAQUANT: CALIBRATION COMPARISON TERMINAL     ")
     print("==================================================")
     
-    report_path = "C:/Users/kasun/.gemini/antigravity-ide/brain/e652e605-7137-4acc-949a-fed0b619d0a2/calibration_comparison.md"
-    repo_dir = "c:/cry_agent/v_4_AQ_AI"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    
+    report_path = os.path.join(project_root, "calibration_comparison.md")
+    repo_dir = project_root
     log_file = os.path.join(repo_dir, config.LOG_FILE)
     
     engine = get_db_engine()
