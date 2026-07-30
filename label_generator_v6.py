@@ -47,15 +47,26 @@ def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_ho
         first_touch_upper = future_window[future_window['high'] >= upper_barrier].index.min()
         first_touch_lower = future_window[future_window['low'] <= lower_barrier].index.min()
 
+        # 🟢 V8.4 Cost Penalty Check: Keep physical barriers unchanged to avoid distorting SL.
+        # Demote wins to HOLD (2) if the profit target does not clear 20 bps transaction costs.
+        cost_pct = 0.0020
+        raw_label = 2
+        
         if pd.notna(first_touch_upper) and pd.notna(first_touch_lower):
-            if first_touch_upper < first_touch_lower:
-                labels.iloc[i] = 1
-            else:
-                labels.iloc[i] = 0
+            raw_label = 1 if first_touch_upper < first_touch_lower else 0
         elif pd.notna(first_touch_upper):
-            labels.iloc[i] = 1
+            raw_label = 1
         elif pd.notna(first_touch_lower):
-            labels.iloc[i] = 0
+            raw_label = 0
+
+        if raw_label == 1:
+            gross_return = (upper_barrier - entry_price) / entry_price
+            labels.iloc[i] = 1 if gross_return > cost_pct else 2
+        elif raw_label == 0:
+            gross_return = (entry_price - lower_barrier) / entry_price
+            labels.iloc[i] = 0 if gross_return > cost_pct else 2
+        else:
+            labels.iloc[i] = 2
                 
     return labels
 

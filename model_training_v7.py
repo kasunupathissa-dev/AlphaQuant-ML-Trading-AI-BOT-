@@ -6,6 +6,7 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.metrics import classification_report
 import joblib
 import os
+import json
 import config
 
 # 🟢 V7.2 Upgrade for V8 Shotgun Pipeline (Cleanup)
@@ -104,6 +105,42 @@ def train_shotgun_models():
         safe_filename = asset.replace("/", "_") + "_brain.pkl"
         joblib.dump(brain, safe_filename)
         print(f"\n  [SUCCESS] Saved Shotgun Calibrated Brain to {safe_filename}")
+
+        # 🟢 V8.4 Upgrade: Weekly Calibration Drift Tracking
+        metadata_file = "model_metadata.json"
+        metadata = {}
+        if os.path.exists(metadata_file):
+            try:
+                with open(metadata_file, "r") as f:
+                    metadata = json.load(f)
+            except Exception:
+                pass
+                
+        metadata_entry = {
+            'last_trained': str(pd.Timestamp.now()),
+            'brier_score': float(brier),
+            'long_reliability': [],
+            'short_reliability': []
+        }
+        
+        try:
+            true_l, pred_l = calibration_curve(y_test == 1, y_prob[:, 1], n_bins=5)
+            for p_pred, p_true in zip(pred_l, true_l):
+                metadata_entry['long_reliability'].append({'pred': float(p_pred), 'true': float(p_true)})
+                
+            true_s, pred_s = calibration_curve(y_test == 0, y_prob[:, 0], n_bins=5)
+            for p_pred, p_true in zip(pred_s, true_s):
+                metadata_entry['short_reliability'].append({'pred': float(p_pred), 'true': float(p_true)})
+        except Exception:
+            pass
+            
+        metadata[asset] = metadata_entry
+        try:
+            with open(metadata_file, "w") as f:
+                json.dump(metadata, f, indent=4)
+            print(f"  [METADATA] Updated weekly calibration metadata in {metadata_file}")
+        except Exception as me_err:
+            print(f"  [WARNING] Failed to write calibration metadata: {me_err}")
 
     print("\n==================================================")
     print(f" Shotgun Model Training Complete ({config.TIMEFRAME}).")

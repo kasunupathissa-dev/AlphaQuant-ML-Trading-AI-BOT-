@@ -71,6 +71,17 @@ def send_telegram_message(msg):
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Telegram request failed: {e}")
 
+def calculate_choppiness_index(df, period=14):
+    """Calculates Choppiness Index (0-100)."""
+    tr = np.maximum(df['high'] - df['low'], 
+                    np.maximum(np.abs(df['high'] - df['close'].shift()), 
+                               np.abs(df['low'] - df['close'].shift())))
+    atr_sum = tr.rolling(window=period).sum()
+    high_max = df['high'].rolling(window=period).max()
+    low_min = df['low'].rolling(window=period).min()
+    range_hl = np.maximum(high_max - low_min, 1e-8)
+    return 100 * np.log10(atr_sum / range_hl) / np.log10(period)
+
 def log_trade_to_csv(trade):
     file_exists = os.path.isfile(config.LOG_FILE)
     with open(config.LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
@@ -268,7 +279,25 @@ class AlphaQuantV8_2:
                         direction = "LONG" if prediction == 1 else "SHORT"
                         win_prob = probabilities[prediction] * 100
                         
-                        if win_prob >= config.MODEL_CONFIDENCE_THRESHOLD:
+                        # 🟢 V8.4 Upgrade: Fetch asset-specific threshold if configured, fallback to global
+                        threshold = getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(asset, config.MODEL_CONFIDENCE_THRESHOLD)
+                        if win_prob >= threshold:
+                            # 🟢 V8.4 Chop Filter Check: Prevent entering trades in choppy/sideways markets
+                            chop_series = calculate_choppiness_index(df, 14)
+                            last_chop = chop_series.iloc[-1]
+                            last_adx = last_closed['adx_14']
+                            
+                            if last_chop > 61.8 and last_adx < 20:
+                                print(f"[REJECT] {asset} signal rejected. Market is in Chop/Sideways regime (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20).")
+                                continue
+                                
+                            # 🟢 V8.4 Correlation Check: Avoid simultaneous LONG/SHORT in highly correlated assets (BTC & ETH)
+                            if asset in ("BTC/USDT", "ETH/USDT"):
+                                correlated_pair = "ETH/USDT" if asset == "BTC/USDT" else "BTC/USDT"
+                                active_correlated = [t for t in active_trades if t['asset'] == correlated_pair and t['direction'] == direction]
+                                if active_correlated:
+                                    print(f"[REJECT] {asset} {direction} signal rejected. Correlated asset {correlated_pair} already has an active {direction} trade.")
+                                    continue
                             # 🟢 V8.3 Upgrade: Fetch actual live price via REST to guarantee accuracy
                             # and prevent stale entry prices or inverted SL/TP parameters.
                             # Fallback: if the REST fetch fails or returns None, we explicitly use the
