@@ -40,11 +40,11 @@ def train_shotgun_models():
             continue
         
         df.dropna(subset=['target_label'], inplace=True)
-        # 🟢 V8.5 Upgrade: Dynamically drop rare classes (<3 samples) to prevent CV splitter crashes
+        # 🟢 V8.5 Upgrade: Dynamically drop rare classes (<10 samples) to prevent CV splitter crashes
         class_counts = df['target_label'].value_counts()
-        rare_classes = class_counts[class_counts < 3].index
+        rare_classes = class_counts[class_counts < 10].index
         if len(rare_classes) > 0:
-            print(f"  [CLEANUP] Dropping rare classes {list(rare_classes)} with <3 samples.")
+            print(f"  [CLEANUP] Dropping rare classes {list(rare_classes)} with <10 samples.")
             df = df[~df['target_label'].isin(rare_classes)].copy()
             
         df['target_label'] = df['target_label'].astype(int)
