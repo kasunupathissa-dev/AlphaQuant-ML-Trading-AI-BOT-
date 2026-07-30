@@ -312,8 +312,16 @@ class AlphaQuantV8_2:
                         direction = "LONG" if prediction == 1 else "SHORT"
                         win_prob = probabilities[prediction] * 100
                         
-                        # 🟢 V8.4 Upgrade: Fetch asset-specific threshold if configured, fallback to global
-                        threshold = getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(asset, config.MODEL_CONFIDENCE_THRESHOLD)
+                        # 🟢 V8.5 Upgrade: Support direction-specific thresholds (LONG vs SHORT)
+                        if direction == "LONG":
+                            base_threshold = getattr(config, 'LONG_CONFIDENCE_THRESHOLD', 65.0)
+                        else:
+                            base_threshold = getattr(config, 'SHORT_CONFIDENCE_THRESHOLD', 60.0)
+                            
+                        # Support asset-and-direction specific overrides, else asset overrides, else base_threshold
+                        threshold = getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(f"{asset}_{direction}", 
+                                    getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(asset, base_threshold))
+                                    
                         if win_prob >= threshold:
                             # 🟢 V8.4 Chop Filter Check: Prevent entering trades in choppy/sideways markets
                             chop_series = calculate_choppiness_index(df, 14)

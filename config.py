@@ -32,9 +32,9 @@ TARGET_ASSETS = [
 TIMEZONE = "Europe/Stockholm"
 ESTIMATED_FEE_PCT = 0.0008
 
-# 🟢 V8.4 Upgrade: Raised to 60.0% based on consistent out-of-sample calibration pattern.
-# This filters out the overconfident 50-60% bins across all assets.
-MODEL_CONFIDENCE_THRESHOLD = 60.0  
+# 🟢 V8.5 Upgrade: Direction-specific confidence thresholds
+LONG_CONFIDENCE_THRESHOLD = 65.0
+SHORT_CONFIDENCE_THRESHOLD = 60.0  
 
 ATR_STOP_LOSS_MULTIPLIER = 1.0     # Optimized baseline for SL
 ATR_TAKE_PROFIT_MULTIPLIER = 1.5    # Optimized baseline for TP

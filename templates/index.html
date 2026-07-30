@@ -359,6 +359,7 @@
         <div class="stat-card">
             <p>WIN RATE</p>
             <h2 id="stat-win-rate">0.00%</h2>
+            <span id="stat-win-rate-split" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: block;">LONG: 0.0% | SHORT: 0.0%</span>
         </div>
         <div class="stat-card">
             <p>TOTAL TRADES</p>
@@ -788,6 +789,15 @@
             pnlEl.className = stats.net_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
             
             document.getElementById('stat-win-rate').innerText = `${stats.win_rate.toFixed(2)}%`;
+            
+            // 🟢 V8.5 Upgrade: Display direction-specific win rate statistics in sub-label
+            const longWr = typeof stats.long_win_rate === 'number' ? stats.long_win_rate : 0.0;
+            const shortWr = typeof stats.short_win_rate === 'number' ? stats.short_win_rate : 0.0;
+            const longN = typeof stats.long_trades === 'number' ? stats.long_trades : 0;
+            const shortN = typeof stats.short_trades === 'number' ? stats.short_trades : 0;
+            document.getElementById('stat-win-rate-split').innerText = 
+                `LONG: ${longWr.toFixed(1)}% (N=${longN}) | SHORT: ${shortWr.toFixed(1)}% (N=${shortN})`;
+                
             document.getElementById('stat-total-trades').innerText = stats.total_trades;
             document.getElementById('stat-profit-factor').innerText = stats.profit_factor.toFixed(2);
         }

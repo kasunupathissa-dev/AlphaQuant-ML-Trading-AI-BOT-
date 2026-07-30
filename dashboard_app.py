@@ -129,6 +129,10 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 "wins": 0,
                 "losses": 0,
                 "win_rate": 0.0,
+                "long_win_rate": 0.0,
+                "short_win_rate": 0.0,
+                "long_trades": 0,
+                "short_trades": 0,
                 "total_pnl": 0.0,
                 "total_fees": 0.0,
                 "net_pnl": 0.0,
@@ -164,6 +168,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                 sl = float(row.get('sl', 0.0))
                                 win_prob = float(str(row.get('win_prob', '0')).replace('%', '').strip())
                                 sig_type = row.get('signaltype', 'TREND').upper()
+                                direction = row.get('direction', 'LONG').upper()
                                 timestamp = row.get('timestamp', '')
                                 
                                 is_win = "PROFIT" in status or "WIN" in status
@@ -176,6 +181,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                 
                                 trades_list.append({
                                     "asset": asset,
+                                    "direction": direction,
                                     "pnl": pnl,
                                     "net_pnl": net_pnl_val,
                                     "is_win": is_win,
@@ -200,6 +206,17 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                         stats["wins"] = len(wins_list)
                         stats["losses"] = len(losses_list)
                         stats["win_rate"] = round((stats["wins"] / total_trades) * 100, 2)
+                        
+                        # 🟢 V8.5 Upgrade: Direction-wise Win Rate calculations (LONG vs SHORT split)
+                        long_trades = [t for t in trades_list if t["direction"] == "LONG"]
+                        short_trades = [t for t in trades_list if t["direction"] == "SHORT"]
+                        long_wins = [t for t in long_trades if t["is_win"]]
+                        short_wins = [t for t in short_trades if t["is_win"]]
+                        
+                        stats["long_trades"] = len(long_trades)
+                        stats["short_trades"] = len(short_trades)
+                        stats["long_win_rate"] = round((len(long_wins) / len(long_trades)) * 100, 2) if long_trades else 0.0
+                        stats["short_win_rate"] = round((len(short_wins) / len(short_trades)) * 100, 2) if short_trades else 0.0
                         stats["total_pnl"] = round(sum(pnl_vals), 4)
                         stats["total_fees"] = round(sum(t["fee"] for t in trades_list), 4)
                         stats["net_pnl"] = round(stats["total_pnl"] - stats["total_fees"], 4)
