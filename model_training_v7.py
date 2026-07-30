@@ -40,7 +40,7 @@ def train_shotgun_models():
             continue
         
         df.dropna(subset=['target_label'], inplace=True)
-        df = df[df['target_label'] != 2].copy()
+        # df = df[df['target_label'] != 2].copy()
         df['target_label'] = df['target_label'].astype(int)
         
         if len(df) < 100 or df['target_label'].nunique() < 2:
@@ -55,15 +55,20 @@ def train_shotgun_models():
 
         class_weights = y_train.value_counts(normalize=True)
         weights = y_train.apply(lambda x: 1 / class_weights[x])
+        
+        # 🟢 V8.5 Debug: Verify weight propagation parameters
+        print(f"  [DEBUG] Weight range: min={weights.min():.2f}, max={weights.max():.2f}")
+        print(f"  [DEBUG] Class distribution in y_train: {y_train.value_counts().to_dict()}")
 
         base_model = xgb.XGBClassifier(
-            objective='binary:logistic',
+            objective='multi:softprob',
+            num_class=3,
             n_estimators=500,
             learning_rate=0.05,
             max_depth=4,
             subsample=0.8,
             colsample_bytree=0.8,
-            eval_metric='logloss'
+            eval_metric='mlogloss'
         )
 
         # Wrap in calibration model (Isotonic Regression)
