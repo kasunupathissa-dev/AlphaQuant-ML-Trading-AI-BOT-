@@ -1,9 +1,11 @@
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from sklearn.model_selection import train_test_split, cross_val_predict
+from sklearn.calibration import calibration_curve
 from sklearn.metrics import classification_report
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.isotonic import IsotonicRegression
 import joblib
 import os
 import json
@@ -11,6 +13,56 @@ import config
 
 # 🟢 V7.2 Upgrade for V8 Shotgun Pipeline (Cleanup)
 from database_config import get_db_engine
+
+class ManualCalibratedClassifier(BaseEstimator, ClassifierMixin):
+    def __init__(self, estimator, cv=3):
+        self.estimator = estimator
+        self.cv = cv
+        
+    def fit(self, X, y, sample_weight=None):
+        self.classes_ = np.unique(y)
+        n_classes = len(self.classes_)
+        
+        fit_params = {}
+        if sample_weight is not None:
+            fit_params['sample_weight'] = sample_weight
+            
+        this_estimator = clone(self.estimator)
+        oof_probs = cross_val_predict(
+            this_estimator, X, y, cv=self.cv,
+            method='predict_proba', params=fit_params
+        )
+        
+        self.estimator_ = clone(self.estimator)
+        if sample_weight is not None:
+            self.estimator_.fit(X, y, sample_weight=sample_weight)
+        else:
+            self.estimator_.fit(X, y)
+            
+        self.calibrators_ = []
+        for i, c in enumerate(self.classes_):
+            y_bin = (y == c).astype(int)
+            calibrator = IsotonicRegression(out_of_bounds='clip')
+            calibrator.fit(oof_probs[:, i], y_bin)
+            self.calibrators_.append(calibrator)
+            
+        return self
+        
+    def predict_proba(self, X):
+        raw_probs = self.estimator_.predict_proba(X)
+        calibrated_probs = np.zeros_like(raw_probs)
+        
+        for i, calibrator in enumerate(self.calibrators_):
+            calibrated_probs[:, i] = calibrator.predict(raw_probs[:, i])
+            
+        row_sums = calibrated_probs.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        calibrated_probs = calibrated_probs / row_sums
+        return calibrated_probs
+        
+    def predict(self, X):
+        probs = self.predict_proba(X)
+        return self.classes_[np.argmax(probs, axis=1)]
 
 def multiclass_brier_score(y_true, y_prob):
     """
@@ -89,7 +141,7 @@ def train_shotgun_models():
         )
 
         # Wrap in calibration model (Isotonic Regression)
-        model = CalibratedClassifierCV(estimator=base_model, method='isotonic', cv=3)
+        model = ManualCalibratedClassifier(estimator=base_model, cv=3)
         model.fit(X_train, y_train, sample_weight=weights)
 
         # Predict probabilities
