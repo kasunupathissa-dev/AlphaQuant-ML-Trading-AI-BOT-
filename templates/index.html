@@ -727,6 +727,7 @@
                 } else {
                     unpnl = t.position_size * ((t.entry - currentPrice) / t.entry);
                 }
+                const totalPnl = unpnl + (t.locked_pnl || 0.0);
                 
                 // Calculate Time in Trade
                 let durationStr = "N/A";
@@ -750,14 +751,14 @@
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td><strong>${t.asset}</strong></td>
+                    <td><strong>${t.asset}</strong>${t.half_closed ? ' <span style="font-size:10px; color:#00c3ff; font-weight:bold;">(Runner)</span>' : ''}</td>
                     <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
                     <td>$${t.entry.toFixed(4)}</td>
                     <td>$${t.sl.toFixed(4)}</td>
                     <td>$${t.tp.toFixed(4)}</td>
                     <td>${t.ai_prob.toFixed(2)}%</td>
                     <td>$${t.position_size.toFixed(2)}</td>
-                    <td><span class="${unpnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${unpnl >= 0 ? '+' : ''}$${unpnl.toFixed(2)}</span></td>
+                    <td><span class="${totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</span></td>
                     <td>${durationStr}</td>
                 `;
                 body.appendChild(tr);

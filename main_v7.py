@@ -269,15 +269,96 @@ class AlphaQuantV8_2:
             is_closed, result, pnl = False, "", 0.0
             notional = trade.get('position_size', 100)
             
+            # --- Dynamic Trailing Stop-Loss Logic ---
+            entry_atr = trade.get('entry_atr')
+            if entry_atr is None:
+                # Fallback calculation if entry_atr is missing from state
+                entry_atr = abs(trade['tp'] - trade['entry']) / 1.5
+                
+            # --- Partial Take Profit (Runner Logic) ---
+            if not trade.get('half_closed', False):
+                if trade['direction'] == "LONG":
+                    # Partial TP activation threshold (price reached Entry + 1.0x ATR)
+                    if current_price >= trade['entry'] + entry_atr:
+                        half_pnl = (notional / 2) * ((current_price - trade['entry']) / trade['entry'])
+                        trade['locked_pnl'] = trade.get('locked_pnl', 0.0) + half_pnl
+                        trade['position_size'] = notional / 2
+                        trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
+                        trade['half_closed'] = True
+                        trade_closed = True
+                        
+                        msg = (
+                            f"🔔 *[V8.2] PARTIAL TP EXECUTED*\n"
+                            f"• *Asset*: {symbol} | LONG\n"
+                            f"• *Closed 50%* at: `${current_price:,.4f}`\n"
+                            f"• *Locked PnL*: *${half_pnl:+.2f}*\n"
+                            f"• *SL moved to breakeven*: `${trade['entry']:,.4f}`"
+                        )
+                        send_telegram_message(msg)
+                else:
+                    # Partial TP activation threshold (price reached Entry - 1.0x ATR)
+                    if current_price <= trade['entry'] - entry_atr:
+                        half_pnl = (notional / 2) * ((trade['entry'] - current_price) / trade['entry'])
+                        trade['locked_pnl'] = trade.get('locked_pnl', 0.0) + half_pnl
+                        trade['position_size'] = notional / 2
+                        trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
+                        trade['half_closed'] = True
+                        trade_closed = True
+                        
+                        msg = (
+                            f"🔔 *[V8.2] PARTIAL TP EXECUTED*\n"
+                            f"• *Asset*: {symbol} | SHORT\n"
+                            f"• *Closed 50%* at: `${current_price:,.4f}`\n"
+                            f"• *Locked PnL*: *${half_pnl:+.2f}*\n"
+                            f"• *SL moved to breakeven*: `${trade['entry']:,.4f}`"
+                        )
+                        send_telegram_message(msg)
+
             if trade['direction'] == "LONG":
-                if current_price >= trade['tp']: is_closed, result, pnl = True, "PROFIT", notional * ((trade['tp'] - trade['entry']) / trade['entry'])
-                elif current_price <= trade['sl']: is_closed, result, pnl = True, "LOSS", notional * ((trade['sl'] - trade['entry']) / trade['entry'])
+                # Update highest watermark
+                trade['highest_price'] = max(trade.get('highest_price', trade['entry']), current_price)
+                # Check activation threshold (price reached Entry + 1.0x ATR)
+                if current_price >= trade['entry'] + entry_atr:
+                    trade['trailing_active'] = True
+                # Shift SL if trailing is active
+                if trade.get('trailing_active', False):
+                    new_sl = trade['highest_price'] - entry_atr
+                    if trade['sl'] < new_sl:
+                        trade['sl'] = new_sl
+                        trade_closed = True # SL updated, persist state
+            else:
+                # Update lowest watermark
+                trade['lowest_price'] = min(trade.get('lowest_price', trade['entry']), current_price)
+                # Check activation threshold (price reached Entry - 1.0x ATR)
+                if current_price <= trade['entry'] - entry_atr:
+                    trade['trailing_active'] = True
+                # Shift SL if trailing is active
+                if trade.get('trailing_active', False):
+                    new_sl = trade['lowest_price'] + entry_atr
+                    if trade['sl'] > new_sl:
+                        trade['sl'] = new_sl
+                        trade_closed = True # SL updated, persist state
+
+            # --- Check Exits ---
+            if trade['direction'] == "LONG":
+                if current_price >= trade['tp']: 
+                    is_closed = True
+                    remaining_pnl = trade['position_size'] * ((trade['tp'] - trade['entry']) / trade['entry'])
+                elif current_price <= trade['sl']: 
+                    is_closed = True
+                    remaining_pnl = trade['position_size'] * ((trade['sl'] - trade['entry']) / trade['entry'])
             else: 
-                if current_price <= trade['tp']: is_closed, result, pnl = True, "PROFIT", notional * ((trade['entry'] - trade['tp']) / trade['entry'])
-                elif current_price >= trade['sl']: is_closed, result, pnl = True, "LOSS", notional * ((trade['entry'] - trade['sl']) / trade['entry'])
+                if current_price <= trade['tp']: 
+                    is_closed = True
+                    remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['tp']) / trade['entry'])
+                elif current_price >= trade['sl']: 
+                    is_closed = True
+                    remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['sl']) / trade['entry'])
 
             if is_closed:
                 trade_closed = True
+                pnl = trade.get('locked_pnl', 0.0) + remaining_pnl
+                result = "PROFIT" if pnl >= 0 else "LOSS"
                 trade.update({'status': result, 'pnl': pnl})
                 log_trade_to_csv(trade)
                 
@@ -443,7 +524,16 @@ class AlphaQuantV8_2:
                             atr_val = last_closed['atr']
                             sl = entry_price - atr_val * config.ATR_STOP_LOSS_MULTIPLIER if direction == "LONG" else entry_price + atr_val * config.ATR_STOP_LOSS_MULTIPLIER
                             tp = entry_price + atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER if direction == "LONG" else entry_price - atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER
-                            target_risk = 10.0
+                            # --- Dynamic Risk Sizing (Kelly-ATR Hybrid) ---
+                            confidence_factor = 1.0 + (win_prob - threshold) / (100.0 - threshold)
+                            atr_pct_val = last_closed['atr_pct']
+                            vol_factor = 0.015 / max(atr_pct_val, 0.001)
+                            volatility_factor = np.clip(vol_factor, 0.5, 1.5)
+                            
+                            target_risk = 10.0 * confidence_factor * volatility_factor
+                            # Cap absolute risk per trade at $20.0 to prevent over-exposure
+                            target_risk = min(target_risk, 20.0)
+                            
                             position_size = (target_risk / abs(entry_price - sl)) * entry_price
                             
                             # 🟢 V8.5 Funnel: Increment executed counter
@@ -461,7 +551,11 @@ class AlphaQuantV8_2:
                                 "asset": asset, "direction": direction, "entry": entry_price, "sl": sl, "tp": tp, 
                                 "status": "OPEN", "ai_prob": win_prob, "position_size": position_size, "pnl": 0.0,
                                 "entry_time": time.time(),
-                                "signal_type": signal_type
+                                "signal_type": signal_type,
+                                "entry_atr": atr_val,
+                                "highest_price": entry_price,
+                                "lowest_price": entry_price,
+                                "trailing_active": False
                             })
                             asset_locks[asset] = True
                             save_state()
