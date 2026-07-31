@@ -39,3 +39,16 @@ SHORT_CONFIDENCE_THRESHOLD = 60.0
 ATR_STOP_LOSS_MULTIPLIER = 1.0     # Optimized baseline for SL
 ATR_TAKE_PROFIT_MULTIPLIER = 1.5    # Optimized baseline for TP
 MAX_PRICE_DEVIATION_PCT = 0.005    # Max price deviation (0.5%) to prevent chasing extended entries
+
+# --- Dynamic Filters (Time, Events, & Multi-Timeframe) ---
+# List of local Stockholm hours (0-23) during which signal generation is disabled.
+# By default, we block late-night/early-morning quiet periods: 23:00 to 02:00 Stockholm time (noise/whipsaw hours).
+BLOCKED_HOURS = [23, 0, 1, 2]
+
+# Enable/Disable economic event blockout filter
+NEWS_BLOCKOUT_ENABLED = True
+# Block signals X minutes before and after a high-impact news event
+NEWS_BLOCKOUT_WINDOW_MINUTES = 60
+
+# Enable/Disable 1H trend alignment check for 15M signals
+MULTITIMEFRAME_VETO_ENABLED = True

@@ -103,6 +103,57 @@ def get_local_time():
     from datetime import timezone, timedelta
     return datetime.now(timezone.utc) + timedelta(hours=2)
 
+def is_news_blockout_active():
+    """
+    Checks if a high-impact economic news event is scheduled within the blockout window.
+    Economic calendar is retrieved from a public JSON endpoint.
+    """
+    if not getattr(config, 'NEWS_BLOCKOUT_ENABLED', True):
+        return False
+        
+    try:
+        # Fetch public economic calendar (Forex Factory JSON feed)
+        url = "https://nfs.faireconomy.media/lul_calendar.json"
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return False
+            
+        events = response.json()
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        window_sec = getattr(config, 'NEWS_BLOCKOUT_WINDOW_MINUTES', 60) * 60
+        
+        # High-impact keywords for crypto volatility
+        high_impact_keywords = ["CPI", "FOMC", "Fed Interest Rate Decision", "Non-Farm Employment Change", "Unemployment Rate", "Powell Speech"]
+        
+        for event in events:
+            impact = event.get("impact", "").lower()
+            title = event.get("title", "")
+            
+            is_high_impact = (impact == "high") or any(kw in title for kw in high_impact_keywords)
+            if not is_high_impact:
+                continue
+                
+            date_str = event.get("date")
+            if not date_str:
+                continue
+                
+            try:
+                # Parse date (ISO 8601)
+                event_time = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                # Convert event time to UTC and strip timezone info for simple comparison
+                event_time_utc = event_time.astimezone(timezone.utc).replace(tzinfo=None)
+                
+                time_diff = abs((event_time_utc - now_utc).total_seconds())
+                if time_diff <= window_sec:
+                    print(f"[NEWS BLOCKOUT] High-impact event detected: '{title}' at {date_str} (Diff: {time_diff/60:.1f} mins). Blocking signals.")
+                    return True
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"[WARNING] Could not check economic calendar: {e}. Defaulting to safe (False).")
+        
+    return False
+
 # 🟢 V8.2 FIX: Custom JSON encoder to handle NumPy data types
 class NumpyEncoder(json.JSONEncoder):
     """ Special json encoder for numpy types """
@@ -171,12 +222,36 @@ def calculate_choppiness_index(df, period=14):
     range_hl = np.maximum(high_max - low_min, 1e-8)
     return 100 * np.log10(atr_sum / range_hl) / np.log10(period)
 
+def log_trade_features_to_csv(trade):
+    features_log_file = "trading_features_v8.csv"
+    file_exists = os.path.isfile(features_log_file)
+    entry_feats = trade.get("entry_features", {})
+    if not entry_feats:
+        return
+        
+    headers = ["Timestamp", "Asset", "Direction", "Status", "PNL", "AI_Prob"] + list(entry_feats.keys())
+    row = [
+        get_local_time().strftime("%Y-%m-%d %H:%M:%S"),
+        trade["asset"],
+        trade["direction"],
+        trade["status"],
+        f"{trade['pnl']:.2f}",
+        f"{trade['ai_prob']:.2f}%"
+    ] + [f"{val:.6f}" for val in entry_feats.values()]
+    
+    with open(features_log_file, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(headers)
+        writer.writerow(row)
+
 def log_trade_to_csv(trade):
     file_exists = os.path.isfile(config.LOG_FILE)
     with open(config.LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists: writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
         writer.writerow([get_local_time().strftime("%Y-%m-%d %H:%M:%S"), trade["asset"], trade["direction"], f"{trade['entry']:.4f}", f"{trade['tp']:.4f}", f"{trade['sl']:.4f}", trade["status"], f"{trade['ai_prob']:.2f}%", f"{trade['pnl']:.2f}", "SHOTGUN"])
+    log_trade_features_to_csv(trade)
 
 class AlphaQuantV8_2:
     def __init__(self):
@@ -395,6 +470,18 @@ class AlphaQuantV8_2:
                 await asyncio.sleep(getattr(config, 'INFERENCE_INTERVAL_SECONDS', 3600)) 
                 if not self.running: break
                 
+                # --- Time-of-Day Performance Filter ---
+                local_time = get_local_time()
+                blocked_hours = getattr(config, 'BLOCKED_HOURS', [])
+                if local_time.hour in blocked_hours:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] [TIME FILTER] Skipping inference cycle. Hour {local_time.hour} is in BLOCKED_HOURS: {blocked_hours}")
+                    continue
+                    
+                # --- News & Event Blockout System ---
+                if await asyncio.to_thread(is_news_blockout_active):
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] [NEWS FILTER] Skipping inference cycle. High-impact news event is nearby.")
+                    continue
+                
                 load_state()
                 send_telegram_message(f"🧠 *[V8.2] Starting Shotgun Inference Cycle on {len(brains)} assets...*")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Executing V8.2 Shotgun Pipeline...")
@@ -482,6 +569,19 @@ class AlphaQuantV8_2:
                                     getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(asset, base_threshold))
                                     
                         if win_prob >= threshold:
+                            # 🟢 V8.5 Multi-Timeframe Veto Power Check
+                            if getattr(config, 'MULTITIMEFRAME_VETO_ENABLED', True):
+                                close_val = last_closed['close']
+                                ema_fast = last_closed['ema_50']
+                                ema_slow = last_closed['ema_200']
+                                
+                                if direction == "LONG" and not (close_val > ema_fast and ema_fast > ema_slow):
+                                    print(f"[REJECT] {asset} LONG signal rejected. Higher-Timeframe trend is not bullish (Close: {close_val:.2f}, Fast EMA: {ema_fast:.2f}, Slow EMA: {ema_slow:.2f}).")
+                                    continue
+                                elif direction == "SHORT" and not (close_val < ema_fast and ema_fast < ema_slow):
+                                    print(f"[REJECT] {asset} SHORT signal rejected. Higher-Timeframe trend is not bearish (Close: {close_val:.2f}, Fast EMA: {ema_fast:.2f}, Slow EMA: {ema_slow:.2f}).")
+                                    continue
+                                    
                             # 🟢 V8.4 Chop Filter Check: Prevent entering trades in choppy/sideways markets
                             chop_series = calculate_choppiness_index(df, 14)
                             last_chop = chop_series.iloc[-1]
@@ -555,7 +655,18 @@ class AlphaQuantV8_2:
                                 "entry_atr": atr_val,
                                 "highest_price": entry_price,
                                 "lowest_price": entry_price,
-                                "trailing_active": False
+                                "trailing_active": False,
+                                "half_closed": False,
+                                "entry_features": {
+                                    "dist_ema_50": float(last_closed['dist_ema_50']),
+                                    "dist_ema_200": float(last_closed['dist_ema_200']),
+                                    "atr_pct": float(last_closed['atr_pct']),
+                                    "volume_zscore": float(last_closed['volume_zscore']),
+                                    "adx_14": float(last_closed['adx_14']),
+                                    "funding_rate_zscore": float(last_closed['funding_rate_zscore']),
+                                    "oi_zscore": float(last_closed['oi_zscore']),
+                                    "bb_width": float(last_closed['bb_width'])
+                                }
                             })
                             asset_locks[asset] = True
                             save_state()
