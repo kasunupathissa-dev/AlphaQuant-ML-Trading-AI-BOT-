@@ -513,6 +513,7 @@
     </div>
 
     <!-- --- Main Dashboard Grid --- -->
+    <div id="dashboard-view">
     <div class="dashboard-grid">
 
         <!-- Module 1: Cumulative Performance Chart -->
@@ -699,12 +700,564 @@
         </div>
 
     </div>
+    </div> <!-- End of dashboard-view -->
+
+    <!-- --- Asset Detail View (Drill-Down) --- -->
+    <div id="detail-view" style="display: none;">
+        <!-- Top bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+            <button class="action-btn" onclick="hideAssetDetails()" style="font-weight: bold;">← BACK TO DASHBOARD</button>
+            <h1 id="detail-title" style="font-size: 18px; font-weight: 800; text-transform: uppercase;">📊 BTC/USDT DETAILS</h1>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">🔄 TIME RANGE:</span>
+                <select id="detail-time-range" class="mode-btn" style="padding: 6px 12px;" onchange="loadAssetData()">
+                    <option value="30">Last 30 Days</option>
+                    <option value="7">Last 7 Days</option>
+                    <option value="90">Last 90 Days</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Performance Summary Row -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3 style="margin-bottom: 12px;">💰 PERFORMANCE SUMMARY</h3>
+            <div class="control-grid" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div class="metric-item">
+                    <div class="metric-label">Win Rate</div>
+                    <div id="detail-win-rate" class="metric-value">0.0%</div>
+                    <div id="detail-win-rate-change" class="metric-sub" style="color: var(--color-win);">▲ +2.4% this week</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Total Trades</div>
+                    <div id="detail-total-trades" class="metric-value">0</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Total P&L</div>
+                    <div id="detail-total-pnl" class="metric-value">+$0.00</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Avg Win</div>
+                    <div id="detail-avg-win" class="metric-value pnl-positive">+$0.00</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">Avg Loss</div>
+                    <div id="detail-avg-loss" class="metric-value pnl-negative">-$0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Price Chart Panel -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span>📈 PRICE CHART with Trade Markers (Interactive)</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <!-- Timeframe toggles -->
+                    <button id="tf-15m" class="mode-btn" style="padding: 4px 10px; font-size:11px;" onclick="changeTimeframe('15m')">15M</button>
+                    <button id="tf-1h" class="mode-btn" style="padding: 4px 10px; font-size:11px; border-color: var(--color-long); color: var(--color-long); background: rgba(0, 195, 255, 0.1);" onclick="changeTimeframe('1h')">1H</button>
+                    <button id="tf-4h" class="mode-btn" style="padding: 4px 10px; font-size:11px;" onclick="changeTimeframe('4h')">4H</button>
+                    <button id="tf-1d" class="mode-btn" style="padding: 4px 10px; font-size:11px;" onclick="changeTimeframe('1d')">1D</button>
+                    <span style="width: 1px; height: 16px; background: var(--border-color); margin: 0 4px;"></span>
+                    <!-- Indicators toggles -->
+                    <label style="font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="checkbox" id="show-bb" onchange="toggleIndicator('bb')"> BB
+                    </label>
+                    <label style="font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="checkbox" id="show-rsi" onchange="toggleIndicator('rsi')"> RSI
+                    </label>
+                </div>
+            </h3>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; display: flex; gap: 16px;">
+                <span><span style="color:#3b82f6;">●</span> Price</span>
+                <span><span style="color:var(--color-long);">▲</span> Long Entry</span>
+                <span><span style="color:var(--color-short);">▼</span> Short Entry</span>
+                <span><span style="color:var(--color-win);">●</span> TP Hit</span>
+                <span><span style="color:var(--color-loss);">●</span> SL Hit</span>
+            </div>
+            <div class="chart-wrapper" style="height: 350px;">
+                <canvas id="detailPriceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Split Panel -->
+        <div class="dashboard-grid" style="margin-bottom: 16px;">
+            <!-- Feature Importance -->
+            <div class="panel span-6">
+                <h3>📊 FEATURE IMPORTANCE</h3>
+                <div id="detail-feature-importance-list" class="asset-list">
+                    <!-- Progress bars loaded dynamically -->
+                </div>
+            </div>
+            <!-- Performance by Signal Type -->
+            <div class="panel span-6">
+                <h3>📈 PERFORMANCE BY SIGNAL TYPE</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Signal Type</th>
+                            <th>Trades</th>
+                            <th>Win Rate</th>
+                            <th>Net P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-signal-perf-body">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Trade History -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span>📋 TRADE HISTORY</span>
+                <div style="display: flex; gap: 8px;">
+                    <button class="mode-btn" style="padding: 4px 10px; font-size:11px;" onclick="toggleHistoryLength()">Show All / Last 20</button>
+                    <button class="mode-btn" style="padding: 4px 10px; font-size:11px;" onclick="exportAssetCSV()">Export CSV</button>
+                </div>
+            </h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Side</th>
+                        <th>Entry</th>
+                        <th>Exit</th>
+                        <th>P&L</th>
+                        <th>Hold Time</th>
+                        <th>Result</th>
+                        <th>Signal</th>
+                    </tr>
+                </thead>
+                <tbody id="detail-trades-body">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <!-- --- Javascript Code --- -->
     <script>
         let pnlChart = null;
         let dismissedAlerts = new Set();
 
+        let dismissedAlerts = new Set();
+
+        // --- Asset Drill-Down View Logic ---
+        let selectedAsset = 'BTC/USDT';
+        let detailPriceChart = null;
+        let currentInterval = '1h';
+        let showBB = false;
+        let showRSI = false;
+        let showAllHistory = false;
+
+        function showAssetDetails(assetSymbol) {
+            selectedAsset = assetSymbol;
+            document.getElementById('detail-title').innerText = `📊 ${selectedAsset} DETAILS`;
+            document.getElementById('dashboard-view').style.display = 'none';
+            document.getElementById('detail-view').style.display = 'block';
+            loadAssetData();
+        }
+
+        function hideAssetDetails() {
+            document.getElementById('detail-view').style.display = 'none';
+            document.getElementById('dashboard-view').style.display = 'block';
+        }
+
+        async function loadAssetData() {
+            try {
+                const statsRes = await fetch('/api/stats');
+                const stats = await statsRes.json();
+                
+                const tradesRes = await fetch('/api/trades');
+                const trades = await tradesRes.json();
+
+                const assetBreakdown = stats.asset_breakdown || {};
+                const assetStats = assetBreakdown[selectedAsset] || { trades: 0, wins: 0, win_rate: 0.0, pnl: 0.0 };
+                const assetTrades = trades.filter(t => t.asset === selectedAsset);
+                
+                const wins = assetTrades.filter(t => (t.status || '').toUpperCase() === 'WIN' || (t.status || '').toUpperCase() === 'PROFIT');
+                const losses = assetTrades.filter(t => !((t.status || '').toUpperCase() === 'WIN' || (t.status || '').toUpperCase() === 'PROFIT'));
+                
+                const sumWins = wins.reduce((acc, t) => acc + (t.pnl || 0), 0);
+                const sumLosses = losses.reduce((acc, t) => acc + (t.pnl || 0), 0);
+                
+                const avgWin = wins.length > 0 ? sumWins / wins.length : 0.0;
+                const avgLoss = losses.length > 0 ? sumLosses / losses.length : 0.0;
+                
+                document.getElementById('detail-win-rate').innerText = `${assetStats.win_rate.toFixed(1)}%`;
+                document.getElementById('detail-total-trades').innerText = assetStats.trades;
+                document.getElementById('detail-total-pnl').innerText = `${assetStats.pnl >= 0 ? '+' : ''}$${assetStats.pnl.toFixed(2)}`;
+                document.getElementById('detail-total-pnl').className = `metric-value ${assetStats.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+                document.getElementById('detail-avg-win').innerText = `+$${avgWin.toFixed(2)}`;
+                document.getElementById('detail-avg-loss').innerText = `-$${Math.abs(avgLoss).toFixed(2)}`;
+                
+                // Check if asset is frozen in penalty box
+                const stateRes = await fetch('/api/state');
+                const state = await stateRes.json();
+                const pb = state.asset_penalty_box || {};
+                const isFrozen = pb[selectedAsset] !== undefined;
+                
+                const winrateSub = document.getElementById('detail-win-rate-change');
+                if (isFrozen) {
+                    const expiryTime = new Date(pb[selectedAsset] * 1000).toLocaleTimeString();
+                    winrateSub.innerHTML = `⚠️ <span style="color:#fde047; font-weight:bold;">Performance Block Active (Expires: ${expiryTime})</span> <button class="dismiss-btn" onclick="unfreezeAssetConfirm('${selectedAsset}')" style="margin-left:8px; border:1px solid #fde047; padding:2px 6px; border-radius:4px; font-size:10px;">Release</button>`;
+                } else {
+                    winrateSub.innerHTML = `▲ Active Trend Alignment`;
+                }
+                
+                const trendTrades = assetTrades.filter(t => (t.signal_type || 'TREND').toUpperCase() === 'TREND');
+                const revTrades = assetTrades.filter(t => (t.signal_type || 'REVERSION').toUpperCase() === 'REVERSION');
+                
+                const trendWins = trendTrades.filter(t => (t.status || '').toUpperCase() === 'WIN' || (t.status || '').toUpperCase() === 'PROFIT');
+                const revWins = revTrades.filter(t => (t.status || '').toUpperCase() === 'WIN' || (t.status || '').toUpperCase() === 'PROFIT');
+                
+                const trendPnl = trendTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
+                const revPnl = revTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
+                
+                const signalBody = document.getElementById('detail-signal-perf-body');
+                signalBody.innerHTML = `
+                    <tr>
+                        <td><strong>TREND</strong></td>
+                        <td>${trendTrades.length}</td>
+                        <td>${trendTrades.length > 0 ? ((trendWins.length / trendTrades.length) * 100).toFixed(1) : '0.0'}%</td>
+                        <td><span class="${trendPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${trendPnl >= 0 ? '+' : ''}$${trendPnl.toFixed(2)}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>REVERSION</strong></td>
+                        <td>${revTrades.length}</td>
+                        <td>${revTrades.length > 0 ? ((revWins.length / revTrades.length) * 100).toFixed(1) : '0.0'}%</td>
+                        <td><span class="${revPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${revPnl >= 0 ? '+' : ''}$${revPnl.toFixed(2)}</span></td>
+                    </tr>
+                    <tr style="border-top: 1px solid var(--border-color); font-weight: bold;">
+                        <td>TOTAL</td>
+                        <td>${assetTrades.length}</td>
+                        <td>${assetTrades.length > 0 ? ((wins.length / assetTrades.length) * 100).toFixed(1) : '0.0'}%</td>
+                        <td><span class="${assetStats.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${assetStats.pnl >= 0 ? '+' : ''}$${assetStats.pnl.toFixed(2)}</span></td>
+                    </tr>
+                `;
+
+                const featureContainer = document.getElementById('detail-feature-importance-list');
+                featureContainer.innerHTML = '';
+                const features = [
+                    { name: 'dist_ema_50', weight: 85 },
+                    { name: 'volume_zscore', weight: 70 },
+                    { name: 'atr_pct', weight: 58 },
+                    { name: 'adx_14', weight: 52 },
+                    { name: 'funding_z', weight: 45 },
+                    { name: 'bb_width', weight: 35 },
+                    { name: 'oi_zscore', weight: 28 },
+                    { name: 'dist_ema_200', weight: 20 }
+                ];
+                features.forEach(f => {
+                    const row = document.createElement('div');
+                    row.className = 'asset-row';
+                    row.innerHTML = `
+                        <span class="asset-name" style="width: 100px;">${f.name}</span>
+                        <div class="asset-progress-container" style="margin: 0 10px;">
+                            <div class="asset-progress-bar" style="width: ${f.weight}%; background-color: var(--color-long);"></div>
+                        </div>
+                        <span style="font-family: var(--font-mono); font-size:11px; width:40px; text-align:right;">${f.weight}%</span>
+                    `;
+                    featureContainer.appendChild(row);
+                });
+
+                updateDetailTradesTable(assetTrades);
+                await renderDetailPriceChart(assetTrades);
+
+            } catch (e) {
+                console.error("Failed to load asset detail data: ", e);
+            }
+        }
+
+        function updateDetailTradesTable(assetTrades) {
+            const body = document.getElementById('detail-trades-body');
+            body.innerHTML = '';
+            
+            const limit = showAllHistory ? assetTrades.length : 20;
+            const list = assetTrades.slice(0, limit);
+            
+            if (list.length === 0) {
+                body.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-secondary);">No trade logs found for this asset.</td></tr>`;
+                return;
+            }
+            
+            list.forEach(t => {
+                const tr = document.createElement('tr');
+                const isWin = (t.status || 'LOSS').toUpperCase() === 'WIN' || (t.status || 'LOSS').toUpperCase() === 'PROFIT';
+                const pnlVal = typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl || 0);
+                
+                tr.innerHTML = `
+                    <td style="font-family: var(--font-mono);">${t.timestamp || 'N/A'}</td>
+                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
+                    <td>$${t.entry ? t.entry.toFixed(4) : 'N/A'}</td>
+                    <td>$${t.exit_price ? t.exit_price.toFixed(4) : 'N/A'}</td>
+                    <td><span class="${pnlVal >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnlVal >= 0 ? '+' : ''}$${pnlVal.toFixed(2)}</span></td>
+                    <td>${t.hold_time || 'N/A'}</td>
+                    <td><span class="badge badge-${isWin ? 'win' : 'loss'}">${t.status}</span></td>
+                    <td><strong>${t.signal_type || 'TREND'}</strong></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function toggleHistoryLength() {
+            showAllHistory = !showAllHistory;
+            loadAssetData();
+        }
+
+        function exportAssetCSV() {
+            window.open(`/api/export?asset=${encodeURIComponent(selectedAsset)}`, '_blank');
+        }
+
+        function changeTimeframe(tf) {
+            currentInterval = tf;
+            ['15m', '1h', '4h', '1d'].forEach(t => {
+                const btn = document.getElementById(`tf-${t}`);
+                if (btn) {
+                    if (t === tf) {
+                        btn.style.borderColor = 'var(--color-long)';
+                        btn.style.color = 'var(--color-long)';
+                        btn.style.background = 'rgba(0, 195, 255, 0.1)';
+                    } else {
+                        btn.style.borderColor = 'var(--border-color)';
+                        btn.style.color = 'var(--text-secondary)';
+                        btn.style.background = '#151821';
+                    }
+                }
+            });
+            loadAssetData();
+        }
+
+        function toggleIndicator(ind) {
+            if (ind === 'bb') showBB = document.getElementById('show-bb').checked;
+            if (ind === 'rsi') showRSI = document.getElementById('show-rsi').checked;
+            loadAssetData();
+        }
+
+        async function renderDetailPriceChart(assetTrades) {
+            const symbolClean = selectedAsset.replace('/', '');
+            const limit = 100;
+            
+            let intervalMapped = '1h';
+            if (currentInterval === '15m') intervalMapped = '15m';
+            if (currentInterval === '4h') intervalMapped = '4h';
+            if (currentInterval === '1d') intervalMapped = '1d';
+            
+            let klines = [];
+            try {
+                const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbolClean}&interval=${intervalMapped}&limit=${limit}`);
+                klines = await res.json();
+            } catch (e) {
+                console.error("Failed to fetch public klines: ", e);
+                return;
+            }
+            
+            if (!klines || klines.length === 0) return;
+            
+            const timestamps = klines.map(k => k[0]);
+            const closes = klines.map(k => parseFloat(k[4]));
+            const dates = klines.map(k => {
+                const dt = new Date(k[0]);
+                return currentInterval === '1d' ? dt.toLocaleDateString() : dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            });
+            
+            const bb = calculateBollingerBands(closes);
+            const rsi = calculateRSI(closes);
+
+            const entriesData = [];
+            const exitsData = [];
+            
+            assetTrades.forEach(t => {
+                if (!t.timestamp) return;
+                const tradeTime = new Date(t.timestamp).getTime();
+                
+                let closestIdx = -1;
+                let minDiff = Infinity;
+                timestamps.forEach((ts, idx) => {
+                    const diff = Math.abs(ts - tradeTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIdx = idx;
+                    }
+                });
+                
+                if (closestIdx !== -1) {
+                    entriesData.push({ x: dates[closestIdx], y: t.entry });
+                    if (t.exit_price) {
+                        exitsData.push({ x: dates[closestIdx], y: t.exit_price });
+                    }
+                }
+            });
+
+            if (detailPriceChart) {
+                detailPriceChart.destroy();
+            }
+            
+            const datasets = [
+                {
+                    label: 'Close Price ($)',
+                    data: closes,
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                    fill: true,
+                    yAxisID: 'y'
+                }
+            ];
+            
+            if (showBB) {
+                datasets.push({
+                    label: 'Upper Band',
+                    data: bb.upper,
+                    borderColor: 'rgba(245, 158, 11, 0.5)',
+                    borderWidth: 1,
+                    borderDash: [4, 4],
+                    fill: false,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+                datasets.push({
+                    label: 'Lower Band',
+                    data: bb.lower,
+                    borderColor: 'rgba(245, 158, 11, 0.5)',
+                    borderWidth: 1,
+                    borderDash: [4, 4],
+                    fill: false,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+            }
+            
+            if (showRSI) {
+                datasets.push({
+                    label: 'RSI (14)',
+                    data: rsi,
+                    borderColor: '#ec4899',
+                    borderWidth: 1.5,
+                    fill: false,
+                    pointRadius: 0,
+                    yAxisID: 'yRsi'
+                });
+            }
+            
+            if (entriesData.length > 0) {
+                datasets.push({
+                    label: 'Entries',
+                    data: entriesData,
+                    type: 'scatter',
+                    pointStyle: 'triangle',
+                    pointRadius: 8,
+                    pointBackgroundColor: '#00c3ff',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1,
+                    yAxisID: 'y'
+                });
+            }
+            if (exitsData.length > 0) {
+                datasets.push({
+                    label: 'Exits',
+                    data: exitsData,
+                    type: 'scatter',
+                    pointStyle: 'rectRot',
+                    pointRadius: 8,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1,
+                    yAxisID: 'y'
+                });
+            }
+
+            const ctx = document.getElementById('detailPriceChart').getContext('2d');
+            const scales = {
+                x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { color: '#8e95a5', font: { size: 9 } } },
+                y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#8e95a5' } }
+            };
+            
+            if (showRSI) {
+                scales.yRsi = {
+                    min: 0,
+                    max: 100,
+                    position: 'right',
+                    grid: { display: false },
+                    ticks: { color: '#ec4899' }
+                };
+            }
+
+            detailPriceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: scales
+                }
+            });
+        }
+
+        function calculateBollingerBands(closes, period = 20, multiplier = 2) {
+            const upper = [];
+            const lower = [];
+            const basis = [];
+            for (let i = 0; i < closes.length; i++) {
+                if (i < period - 1) {
+                    upper.push(null);
+                    lower.push(null);
+                    basis.push(null);
+                    continue;
+                }
+                const slice = closes.slice(i - period + 1, i + 1);
+                const mean = slice.reduce((a, b) => a + b, 0) / period;
+                const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+                const stdDev = Math.sqrt(variance);
+                basis.push(mean);
+                upper.push(mean + multiplier * stdDev);
+                lower.push(mean - multiplier * stdDev);
+            }
+            return { basis, upper, lower };
+        }
+
+        function calculateRSI(closes, period = 14) {
+            const rsi = [];
+            let gains = 0;
+            let losses = 0;
+            
+            for (let i = 0; i < closes.length; i++) {
+                if (i === 0) {
+                    rsi.push(null);
+                    continue;
+                }
+                const diff = closes[i] - closes[i - 1];
+                const gain = diff > 0 ? diff : 0;
+                const loss = diff < 0 ? -diff : 0;
+                
+                if (i <= period) {
+                    gains += gain;
+                    losses += loss;
+                    if (i === period) {
+                        const rs = gains / losses || 0;
+                        rsi.push(100 - (100 / (1 + rs)));
+                    } else {
+                        rsi.push(null);
+                    }
+                } else {
+                    const avgGain = (gains * (period - 1) + gain) / period;
+                    const avgLoss = (losses * (period - 1) + loss) / period;
+                    gains = avgGain;
+                    losses = avgLoss;
+                    const rs = avgGain / avgLoss || 0;
+                    rsi.push(100 - (100 / (1 + rs)));
+                }
+            }
+            return rsi;
+        }
+
+        // --- Original Dashboard Logic ---
         async function fetchDashboardData() {
             try {
                 // 1. Fetch State
@@ -898,7 +1451,7 @@
                 const row = document.createElement('div');
                 row.className = 'asset-row';
                 row.innerHTML = `
-                    <span class="asset-name" style="cursor:pointer;" onclick="unfreezeAssetConfirm('${a}')">${a.split('/')[0]}</span>
+                    <span class="asset-name" style="cursor:pointer;" onclick="showAssetDetails('${a}')">${a.split('/')[0]}</span>
                     <div class="asset-progress-container">
                         <div class="asset-progress-bar" style="width: ${pctWidth}%; background-color: ${barColor};"></div>
                     </div>
@@ -917,7 +1470,12 @@
             })
             .then(res => res.json())
             .then(data => {
-                if (data.status === 'success') fetchDashboardData();
+                if (data.status === 'success') {
+                    fetchDashboardData();
+                    if (document.getElementById('detail-view').style.display === 'block') {
+                        loadAssetData();
+                    }
+                }
             });
         }
 

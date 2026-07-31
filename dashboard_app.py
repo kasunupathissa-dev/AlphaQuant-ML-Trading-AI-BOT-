@@ -57,8 +57,12 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             print(f"[ERROR] Failed to send JSON: {e}")
 
     def do_GET(self):
+        from urllib.parse import urlparse, parse_qs
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+
         # 1. API Endpoint: State
-        if self.path == '/api/state':
+        if path == '/api/state':
             if os.path.exists(STATE_FILE):
                 try:
                     with open(STATE_FILE, 'r') as f:
@@ -88,7 +92,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 })
 
         # 2. API Endpoint: Trades Log
-        elif self.path == '/api/trades':
+        elif path == '/api/trades':
             trades = []
             if os.path.exists(LOG_FILE):
                 try:
@@ -123,7 +127,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json([])
 
         # 3. API Endpoint: Statistical Report
-        elif self.path == '/api/stats':
+        elif path == '/api/stats':
             stats = {
                 "total_trades": 0,
                 "wins": 0,
@@ -364,7 +368,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json(stats)
 
         # 🟢 V8.5 API Endpoint: Calibration reliability curves
-        elif self.path == '/api/calibration':
+        elif path == '/api/calibration':
             if os.path.exists("model_metadata.json"):
                 try:
                     with open("model_metadata.json", 'r') as f:
@@ -373,23 +377,44 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 except Exception as e:
                     self.send_json({"error": f"Failed to load calibration data: {str(e)}"}, 500)
         # 🟢 V8.5 API Endpoint: Export Report
-        elif self.path == '/api/export':
+        elif path == '/api/export':
             try:
+                query_params = parse_qs(parsed_path.query)
+                asset_filter = query_params.get('asset', [None])[0]
+                
                 if os.path.exists(LOG_FILE):
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/csv')
-                    self.send_header('Content-Disposition', 'attachment; filename="trading_log_v8.csv"')
+                    
+                    if asset_filter:
+                        filename = f"{asset_filter.replace('/', '_')}_log.csv"
+                    else:
+                        filename = "trading_log_v8.csv"
+                        
+                    self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
-                    with open(LOG_FILE, 'rb') as f:
-                        self.wfile.write(f.read())
+                    
+                    with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        
+                    if asset_filter:
+                        lines = content.split('\n')
+                        header = lines[0]
+                        filtered_lines = [header]
+                        for line in lines[1:]:
+                            if asset_filter in line:
+                                filtered_lines.append(line)
+                        self.wfile.write('\n'.join(filtered_lines).encode('utf-8'))
+                    else:
+                        self.wfile.write(content.encode('utf-8'))
                 else:
                     self.send_json({"error": "No log file found."}, 404)
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
 
         # 4. Static Page: index.html
-        elif self.path in ('/', '/index.html'):
+        elif path in ('/', '/index.html'):
             html_path = os.path.join(TEMPLATES_DIR, "index.html")
             if os.path.exists(html_path):
                 try:
