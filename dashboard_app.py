@@ -486,6 +486,11 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     pb[asset] = datetime.now().timestamp() + (24 * 3600)
                     state_data["asset_penalty_box"] = pb
                     updated = True
+                    
+                # 4. Update configuration settings settings block if passed
+                if "settings" in req_data:
+                    state_data["settings"] = req_data["settings"]
+                    updated = True
                         
                 if updated:
                     with open(STATE_FILE, 'w') as f:

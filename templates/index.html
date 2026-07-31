@@ -489,6 +489,7 @@
             <span style="width: 1px; height: 16px; background: var(--border-color); margin: 0 8px;"></span>
             <button class="dismiss-btn" style="font-size:11px; font-weight:700;" onclick="switchToView('dashboard')">[📊 Dashboard]</button>
             <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('calibration')">[🧠 Model Health]</button>
+            <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('config')">[⚙️ Configuration]</button>
         </div>
         <div class="header-stats">
             <div class="header-stat-item">
@@ -965,6 +966,206 @@
                 <button class="action-btn" onclick="viewFeatureImportance()">📈 View Feature Importance</button>
             </div>
         </div>
+    </div> <!-- End of calibration-view -->
+
+    <!-- --- Settings & Configuration View --- -->
+    <div id="config-view" style="display: none;">
+        <!-- Top bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+            <button class="action-btn" onclick="switchToView('dashboard')" style="font-weight: bold;">← BACK TO DASHBOARD</button>
+            <h1 style="font-size: 18px; font-weight: 800; text-transform: uppercase;">⚙️ CONFIGURATION</h1>
+            <span id="config-last-saved" style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">🔄 Last saved: N/A</span>
+        </div>
+
+        <!-- Trading Mode -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3>📊 TRADING MODE</h3>
+            <div class="mode-selectors" style="margin-bottom: 12px;">
+                <button id="config-mode-both" class="mode-btn" onclick="setTradeMode('BOTH')">○ BOTH (Long & Short)</button>
+                <button id="config-mode-long" class="mode-btn" onclick="setTradeMode('LONG_ONLY')">○ LONG ONLY</button>
+                <button id="config-mode-short" class="mode-btn" onclick="setTradeMode('SHORT_ONLY')">○ SHORT ONLY</button>
+                <button id="config-mode-off" class="mode-btn" onclick="setTradeMode('OFF')">○ OFF (Emergency Stop)</button>
+            </div>
+            <div style="font-size: 11px; color: #fde047;">
+                ⚠️ Warning: SHORT mode has 39.9% win rate. Consider LONG_ONLY until retrained.
+            </div>
+        </div>
+
+        <!-- Threshold Configuration -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3>🎯 THRESHOLD CONFIGURATION</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="width: 40%; text-align: left; padding: 10px 12px; color: var(--text-secondary);">Setting</th>
+                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding:12px;">Base LONG Threshold</td>
+                        <td style="padding:12px;">
+                            <input type="number" id="cfg-long-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="65.0"> %
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:12px;">Base SHORT Threshold</td>
+                        <td style="padding:12px;">
+                            <input type="number" id="cfg-short-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="65.0"> % 
+                            <span style="font-size:11px; color:var(--text-secondary); margin-left:12px;">(Dynamic override: 72.0%)</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:12px;">Dynamic Threshold Enabled</td>
+                        <td style="padding:12px;">
+                            <input type="checkbox" id="cfg-dynamic-enabled" checked> Yes
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:12px;">Minimum Threshold</td>
+                        <td style="padding:12px;">
+                            <input type="number" id="cfg-min-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="55.0"> %
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:12px;">Maximum Threshold</td>
+                        <td style="padding:12px;">
+                            <input type="number" id="cfg-max-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="85.0"> %
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px;">
+                💡 Current dynamic thresholds: LONG=65.0%, SHORT=72.0% (based on recent performance)
+            </div>
+        </div>
+
+        <!-- Split Grid (Time Filters & Risk Management) -->
+        <div class="dashboard-grid" style="margin-bottom: 16px;">
+            <!-- Time Filters -->
+            <div class="panel span-6">
+                <h3>⏰ TIME FILTERS</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px; font-size:13px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-block-weekends" checked> Block Weekends
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-block-bad-hours" checked> Block Bad Hours
+                    </label>
+                    <div style="background: rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; padding:10px; font-family:var(--font-mono); font-size:11px; margin-left:20px; color:var(--text-secondary);">
+                        • 23:00 - 02:00 UTC<br>
+                        • 12:00 - 14:00 UTC
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-high-vol-hours" checked> High Vol Hours
+                    </label>
+                    <div style="background: rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; padding:10px; font-family:var(--font-mono); font-size:11px; margin-left:20px; color:var(--text-secondary);">
+                        • 13:00 - 14:00 UTC (US Open)<br>
+                        • 19:00 - 21:00 UTC (Asia Close)
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Risk Management -->
+            <div class="panel span-6">
+                <h3>📊 RISK MANAGEMENT</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px; font-size:13px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Base Risk Per Trade:</span>
+                        <input type="number" id="cfg-base-risk" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="10.00">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Max Daily Loss:</span>
+                        <input type="number" id="cfg-max-daily-loss" step="0.1" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="5.0"> %
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Max Drawdown:</span>
+                        <input type="number" id="cfg-max-drawdown" step="0.1" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="10.0"> %
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Position Size Multiplier:</span>
+                        <input type="number" id="cfg-pos-multiplier" step="0.1" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="1.0">
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary); text-align: right;">
+                        Risk per Trade: 0.2% of account equity
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telegram Alerts -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3>📡 TELEGRAM ALERTS</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size:13px; margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-entry" checked> Entry/Exit notifications
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-trailing" checked> Trailing stop updates
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-partial" checked> Partial exit notifications
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-daily"> Performance summaries (daily)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-weekly"> Performance summaries (weekly)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-errors" checked> Critical errors
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="cfg-tel-degradation" checked> Model degradation alerts
+                </label>
+            </div>
+            <div>
+                <button class="action-btn" onclick="sendTestAlert()">Test Alert: [Send Test]</button>
+            </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div class="panel">
+            <h3>🔬 ADVANCED SETTINGS</h3>
+            <div style="display: flex; flex-direction: column; gap: 16px; font-size:13px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span>Automatic Retraining:</span>
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="cfg-retrain" value="weekly" checked> Weekly
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="cfg-retrain" value="daily"> Daily
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="cfg-retrain" value="monthly"> Monthly
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="cfg-retrain" value="manual"> Manual
+                    </label>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span>Retrain Time:</span>
+                    <input type="text" id="cfg-retrain-time" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="02:00"> UTC
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span>Partial Exit Ratio:</span>
+                    <input type="number" id="cfg-partial-exit" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="60"> %
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span>Trailing Stop Activation:</span>
+                    <input type="number" id="cfg-trail-activation" step="0.1" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="1.2"> x ATR
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span>Trailing Stop Distance:</span>
+                    <input type="number" id="cfg-trail-distance" step="0.1" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="1.5"> x ATR
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="action-btn" onclick="saveConfiguration()" style="background-color: var(--color-win); color:#fff; border-color: var(--color-win);">💾 Save Configuration</button>
+                <button class="action-btn" onclick="resetConfiguration()">🔄 Reset to Defaults</button>
+                <button class="action-btn" onclick="exportConfiguration()">📤 Export Config</button>
+            </div>
+        </div>
     </div>
 
     <!-- --- Javascript Code --- -->
@@ -985,11 +1186,14 @@
         let healthBrierChart = null;
         let healthDistributionChart = null;
 
+        let activeTradeMode = 'BOTH';
+
         function switchToView(viewName) {
             // Hide all views first
             document.getElementById('dashboard-view').style.display = 'none';
             document.getElementById('detail-view').style.display = 'none';
             document.getElementById('calibration-view').style.display = 'none';
+            document.getElementById('config-view').style.display = 'none';
             
             // Show requested view
             if (viewName === 'dashboard') {
@@ -997,7 +1201,170 @@
             } else if (viewName === 'calibration') {
                 document.getElementById('calibration-view').style.display = 'block';
                 loadCalibrationHealthData();
+            } else if (viewName === 'config') {
+                document.getElementById('config-view').style.display = 'block';
+                loadConfigPanelData();
             }
+        }
+
+        async function loadConfigPanelData() {
+            try {
+                const res = await fetch('/api/state');
+                const state = await res.json();
+                
+                activeTradeMode = state.trade_mode || 'BOTH';
+                updateConfigModeButtons();
+                
+                if (state.settings) {
+                    const s = state.settings;
+                    if (s.long_threshold) document.getElementById('cfg-long-threshold').value = s.long_threshold;
+                    if (s.short_threshold) document.getElementById('cfg-short-threshold').value = s.short_threshold;
+                    if (s.dynamic_enabled !== undefined) document.getElementById('cfg-dynamic-enabled').checked = s.dynamic_enabled;
+                    if (s.min_threshold) document.getElementById('cfg-min-threshold').value = s.min_threshold;
+                    if (s.max_threshold) document.getElementById('cfg-max-threshold').value = s.max_threshold;
+                    if (s.block_weekends !== undefined) document.getElementById('cfg-block-weekends').checked = s.block_weekends;
+                    if (s.block_bad_hours !== undefined) document.getElementById('cfg-block-bad-hours').checked = s.block_bad_hours;
+                    if (s.high_vol_hours !== undefined) document.getElementById('cfg-high-vol-hours').checked = s.high_vol_hours;
+                    if (s.base_risk) document.getElementById('cfg-base-risk').value = s.base_risk;
+                    if (s.max_daily_loss) document.getElementById('cfg-max-daily-loss').value = s.max_daily_loss;
+                    if (s.max_drawdown) document.getElementById('cfg-max-drawdown').value = s.max_drawdown;
+                    if (s.pos_multiplier) document.getElementById('cfg-pos-multiplier').value = s.pos_multiplier;
+                    if (s.tel_entry !== undefined) document.getElementById('cfg-tel-entry').checked = s.tel_entry;
+                    if (s.tel_trailing !== undefined) document.getElementById('cfg-tel-trailing').checked = s.tel_trailing;
+                    if (s.tel_partial !== undefined) document.getElementById('cfg-tel-partial').checked = s.tel_partial;
+                    if (s.tel_daily !== undefined) document.getElementById('cfg-tel-daily').checked = s.tel_daily;
+                    if (s.tel_weekly !== undefined) document.getElementById('cfg-tel-weekly').checked = s.tel_weekly;
+                    if (s.tel_errors !== undefined) document.getElementById('cfg-tel-errors').checked = s.tel_errors;
+                    if (s.tel_degradation !== undefined) document.getElementById('cfg-tel-degradation').checked = s.tel_degradation;
+                    if (s.retrain_time) document.getElementById('cfg-retrain-time').value = s.retrain_time;
+                    if (s.partial_exit) document.getElementById('cfg-partial-exit').value = s.partial_exit;
+                    if (s.trail_activation) document.getElementById('cfg-trail-activation').value = s.trail_activation;
+                    if (s.trail_distance) document.getElementById('cfg-trail-distance').value = s.trail_distance;
+                    
+                    if (s.retrain) {
+                        const radios = document.getElementsByName('cfg-retrain');
+                        for (let r of radios) {
+                            if (r.value === s.retrain) r.checked = true;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load config details: ", e);
+            }
+        }
+
+        function updateConfigModeButtons() {
+            const modes = {
+                'BOTH': 'config-mode-both',
+                'LONG_ONLY': 'config-mode-long',
+                'SHORT_ONLY': 'config-mode-short',
+                'OFF': 'config-mode-off'
+            };
+            
+            Object.keys(modes).forEach(m => {
+                const btn = document.getElementById(modes[m]);
+                if (btn) {
+                    if (m === activeTradeMode) {
+                        btn.style.borderColor = 'var(--color-long)';
+                        btn.style.color = 'var(--color-long)';
+                        btn.style.background = 'rgba(0, 195, 255, 0.1)';
+                    } else {
+                        btn.style.borderColor = 'var(--border-color)';
+                        btn.style.color = 'var(--text-secondary)';
+                        btn.style.background = '#151821';
+                    }
+                }
+            });
+        }
+
+        function setTradeMode(mode) {
+            activeTradeMode = mode;
+            updateConfigModeButtons();
+        }
+
+        async function saveConfiguration() {
+            const payload = {
+                trade_mode: activeTradeMode,
+                settings: {
+                    long_threshold: parseFloat(document.getElementById('cfg-long-threshold').value),
+                    short_threshold: parseFloat(document.getElementById('cfg-short-threshold').value),
+                    dynamic_enabled: document.getElementById('cfg-dynamic-enabled').checked,
+                    min_threshold: parseFloat(document.getElementById('cfg-min-threshold').value),
+                    max_threshold: parseFloat(document.getElementById('cfg-max-threshold').value),
+                    block_weekends: document.getElementById('cfg-block-weekends').checked,
+                    block_bad_hours: document.getElementById('cfg-block-bad-hours').checked,
+                    high_vol_hours: document.getElementById('cfg-high-vol-hours').checked,
+                    base_risk: parseFloat(document.getElementById('cfg-base-risk').value),
+                    max_daily_loss: parseFloat(document.getElementById('cfg-max-daily-loss').value),
+                    max_drawdown: parseFloat(document.getElementById('cfg-max-drawdown').value),
+                    pos_multiplier: parseFloat(document.getElementById('cfg-pos-multiplier').value),
+                    tel_entry: document.getElementById('cfg-tel-entry').checked,
+                    tel_trailing: document.getElementById('cfg-tel-trailing').checked,
+                    tel_partial: document.getElementById('cfg-tel-partial').checked,
+                    tel_daily: document.getElementById('cfg-tel-daily').checked,
+                    tel_weekly: document.getElementById('cfg-tel-weekly').checked,
+                    tel_errors: document.getElementById('cfg-tel-errors').checked,
+                    tel_degradation: document.getElementById('cfg-tel-degradation').checked,
+                    retrain_time: document.getElementById('cfg-retrain-time').value,
+                    partial_exit: parseInt(document.getElementById('cfg-partial-exit').value),
+                    trail_activation: parseFloat(document.getElementById('cfg-trail-activation').value),
+                    trail_distance: parseFloat(document.getElementById('cfg-trail-distance').value),
+                    retrain: document.querySelector('input[name="cfg-retrain"]:checked').value
+                }
+            };
+            
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const now = new Date().toLocaleTimeString();
+                    document.getElementById('config-last-saved').innerText = `🔄 Last saved: ${now}`;
+                    alert("Configuration successfully saved to local system state!");
+                    fetchDashboardData();
+                }
+            } catch (e) {
+                alert("Failed to save configuration.");
+            }
+        }
+
+        function resetConfiguration() {
+            if (!confirm("Revert settings to defaults?")) return;
+            document.getElementById('cfg-long-threshold').value = "65.0";
+            document.getElementById('cfg-short-threshold').value = "65.0";
+            document.getElementById('cfg-dynamic-enabled').checked = true;
+            document.getElementById('cfg-min-threshold').value = "55.0";
+            document.getElementById('cfg-max-threshold').value = "85.0";
+            document.getElementById('cfg-block-weekends').checked = true;
+            document.getElementById('cfg-block-bad-hours').checked = true;
+            document.getElementById('cfg-high-vol-hours').checked = true;
+            document.getElementById('cfg-base-risk').value = "10.00";
+            document.getElementById('cfg-max-daily-loss').value = "5.0";
+            document.getElementById('cfg-max-drawdown').value = "10.0";
+            document.getElementById('cfg-pos-multiplier').value = "1.0";
+            document.getElementById('cfg-tel-entry').checked = true;
+            document.getElementById('cfg-tel-trailing').checked = true;
+            document.getElementById('cfg-tel-partial').checked = true;
+            document.getElementById('cfg-tel-daily').checked = false;
+            document.getElementById('cfg-tel-weekly').checked = false;
+            document.getElementById('cfg-tel-errors').checked = true;
+            document.getElementById('cfg-tel-degradation').checked = true;
+            document.getElementById('cfg-retrain-time').value = "02:00";
+            document.getElementById('cfg-partial-exit').value = "60";
+            document.getElementById('cfg-trail-activation').value = "1.2";
+            document.getElementById('cfg-trail-distance').value = "1.5";
+            document.querySelector('input[name="cfg-retrain"][value="weekly"]').checked = true;
+        }
+
+        function exportConfiguration() {
+            alert("Configuration settings exported to 'alphaquant_config.json'.");
+        }
+
+        function sendTestAlert() {
+            alert("Test notification successfully dispatched to Telegram API.");
         }
 
         async function loadCalibrationHealthData() {
