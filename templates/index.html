@@ -89,6 +89,34 @@
             animation: pulse 1.5s infinite;
         }
 
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: var(--font-mono);
+            margin-left: 8px;
+        }
+
+        .nav-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-btn.active {
+            color: #fff;
+            background: rgba(0, 195, 255, 0.1);
+            border-color: var(--color-long);
+        }
+
         .header-stats {
             display: flex;
             gap: 24px;
@@ -487,10 +515,10 @@
                 <span id="bot-status-text">LIVE</span>
             </div>
             <span style="width: 1px; height: 16px; background: var(--border-color); margin: 0 8px;"></span>
-            <button class="dismiss-btn" style="font-size:11px; font-weight:700;" onclick="switchToView('dashboard')">[📊 Dashboard]</button>
-            <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('calibration')">[🧠 Model Health]</button>
-            <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('config')">[⚙️ Configuration]</button>
-            <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('penalty')">[🚫 Penalty Box]</button>
+            <button id="nav-dashboard" class="nav-btn active" onclick="switchToView('dashboard')">📊 Dashboard</button>
+            <button id="nav-calibration" class="nav-btn" onclick="switchToView('calibration')">🧠 Model Health</button>
+            <button id="nav-config" class="nav-btn" onclick="switchToView('config')">⚙️ Configuration</button>
+            <button id="nav-penalty" class="nav-btn" onclick="switchToView('penalty')">🚫 Penalty Box</button>
         </div>
         <div class="header-stats">
             <div class="header-stat-item">
@@ -1244,17 +1272,28 @@
             document.getElementById('config-view').style.display = 'none';
             document.getElementById('penalty-view').style.display = 'none';
             
+            // Remove active class from all header nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            
             // Show requested view
             if (viewName === 'dashboard') {
                 document.getElementById('dashboard-view').style.display = 'block';
+                const activeBtn = document.getElementById('nav-dashboard');
+                if (activeBtn) activeBtn.classList.add('active');
             } else if (viewName === 'calibration') {
                 document.getElementById('calibration-view').style.display = 'block';
+                const activeBtn = document.getElementById('nav-calibration');
+                if (activeBtn) activeBtn.classList.add('active');
                 loadCalibrationHealthData();
             } else if (viewName === 'config') {
                 document.getElementById('config-view').style.display = 'block';
+                const activeBtn = document.getElementById('nav-config');
+                if (activeBtn) activeBtn.classList.add('active');
                 loadConfigPanelData();
             } else if (viewName === 'penalty') {
                 document.getElementById('penalty-view').style.display = 'block';
+                const activeBtn = document.getElementById('nav-penalty');
+                if (activeBtn) activeBtn.classList.add('active');
                 loadPenaltyBoxPanelData();
             }
         }
