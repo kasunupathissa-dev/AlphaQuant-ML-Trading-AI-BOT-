@@ -11,6 +11,16 @@ from datetime import datetime
 import json
 import ccxt
 import sys
+import socket
+
+# ⚙️ Singleton Process Lock (Prevents duplicate instances of main_v7.py)
+lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    lock_socket.bind(('127.0.0.1', 9999))
+except socket.error:
+    print("[FATAL] Another instance of main_v7.py is already running. Exiting to prevent duplicate trades.")
+    sys.exit(1)
+
 try:
     from zoneinfo import ZoneInfo
 except ImportError:
