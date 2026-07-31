@@ -372,8 +372,21 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     self.send_json(meta)
                 except Exception as e:
                     self.send_json({"error": f"Failed to load calibration data: {str(e)}"}, 500)
-            else:
-                self.send_json({})
+        # 🟢 V8.5 API Endpoint: Export Report
+        elif self.path == '/api/export':
+            try:
+                if os.path.exists(LOG_FILE):
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/csv')
+                    self.send_header('Content-Disposition', 'attachment; filename="trading_log_v8.csv"')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    with open(LOG_FILE, 'rb') as f:
+                        self.wfile.write(f.read())
+                else:
+                    self.send_json({"error": "No log file found."}, 404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
 
         # 4. Static Page: index.html
         elif self.path in ('/', '/index.html'):
@@ -438,6 +451,17 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                         state_data["asset_penalty_box"] = pb
                         updated = True
                         
+                # 3. Force close a specific position if passed
+                if "close_trade" in req_data:
+                    asset = req_data["close_trade"]
+                    trades = state_data.get("active_trades", [])
+                    state_data["active_trades"] = [t for t in trades if t["asset"] != asset]
+                    # Also freeze the asset in the penalty box for 24h to prevent immediate re-entry
+                    pb = state_data.get("asset_penalty_box", {})
+                    pb[asset] = datetime.now().timestamp() + (24 * 3600)
+                    state_data["asset_penalty_box"] = pb
+                    updated = True
+                        
                 if updated:
                     with open(STATE_FILE, 'w') as f:
                         json.dump(state_data, f, indent=4)
@@ -446,6 +470,13 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"status": "success", "state": state_data})
             except Exception as e:
                 self.send_json({"status": "error", "message": str(e)}, 400)
+        elif self.path == '/api/retrain':
+            try:
+                import subprocess
+                subprocess.Popen([sys.executable, "model_training_v7.py"])
+                self.send_json({"status": "success", "message": "Retraining started in the background."})
+            except Exception as e:
+                self.send_json({"status": "error", "message": str(e)}, 500)
         else:
             self.send_response(404)
             self.end_headers()

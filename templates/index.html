@@ -3,27 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlphaQuant AI - Dashboard</title>
+    <title>AlphaQuant AI - Live Scalping Station</title>
     <!-- Google Font: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-base: #0b0e17;
-            --bg-surface: rgba(17, 24, 39, 0.7);
-            --border-color: rgba(255, 255, 255, 0.08);
+            --bg-base: #07090e;
+            --bg-surface: #0f121d;
+            --border-color: rgba(255, 255, 255, 0.05);
+            --border-active: rgba(0, 195, 255, 0.2);
             --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
-            --color-long: #3b82f6; /* Blue-500 */
-            --color-short: #ef4444; /* Red-500 */
-            --color-win: #10b981; /* Green-500 */
-            --color-win-glow: rgba(16, 185, 129, 0.15);
-            --color-loss: #f43f5e; /* Rose-500 */
-            --color-loss-glow: rgba(244, 63, 94, 0.15);
-            --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+            --text-secondary: #8e95a5;
+            --color-long: #00c3ff;
+            --color-short: #ef4444;
+            --color-win: #10b981;
+            --color-loss: #f43f5e;
+            --card-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.5);
+            --font-mono: 'JetBrains Mono', monospace;
         }
 
         * {
@@ -34,693 +34,795 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background: radial-gradient(circle at top right, #111a2e 0%, var(--bg-base) 60%);
+            background-color: var(--bg-base);
             color: var(--text-primary);
             min-height: 100vh;
-            padding: 24px;
+            padding: 20px;
             overflow-x: hidden;
         }
 
+        /* --- Header Styles --- */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 16px 24px;
             background: var(--bg-surface);
-            backdrop-filter: blur(12px);
             border: 1px solid var(--border-color);
-            border-radius: 16px;
+            border-radius: 12px;
             box-shadow: var(--card-shadow);
-            margin-bottom: 24px;
+            margin-bottom: 16px;
         }
 
-        .logo-section h1 {
-            font-size: 24px;
-            font-weight: 700;
-            background: linear-gradient(90deg, #60a5fa 0%, #34d399 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.5px;
-        }
-
-        .logo-section p {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 2px;
-        }
-
-        .status-badge {
+        .brand {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
-            border-radius: 9999px;
-            font-size: 13px;
+            gap: 12px;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
+        .brand h1 {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #fff;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--color-win);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            background-color: var(--text-secondary);
-        }
-
-        .status-dot.active {
             background-color: var(--color-win);
-            box-shadow: 0 0 12px var(--color-win);
+            box-shadow: 0 0 8px var(--color-win);
             animation: pulse 1.5s infinite;
         }
 
-        .status-dot.inactive {
-            background-color: var(--color-loss);
-            box-shadow: 0 0 12px var(--color-loss);
+        .header-stats {
+            display: flex;
+            gap: 24px;
+            font-family: var(--font-mono);
+            font-size: 14px;
         }
 
-        @keyframes pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        .header-stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: var(--bg-surface);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: var(--card-shadow);
-            transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-2px);
-            border-color: rgba(255, 255, 255, 0.15);
-        }
-
-        .stat-card p {
-            font-size: 13px;
+        .header-stat-label {
             color: var(--text-secondary);
+        }
+
+        /* --- Alerts Section --- */
+        .alerts-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .alert-banner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 13px;
             font-weight: 500;
         }
 
-        .stat-card h2 {
-            font-size: 28px;
-            font-weight: 700;
-            margin-top: 8px;
+        .alert-banner.red {
+            background: rgba(244, 63, 94, 0.08);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            color: #fda4af;
         }
 
-        .charts-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 24px;
-            margin-bottom: 24px;
+        .alert-banner.yellow {
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            color: #fde047;
         }
 
-        .chart-container {
-            background: var(--bg-surface);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border-color);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: var(--card-shadow);
-            position: relative;
-            height: 380px; 
-            overflow: hidden;
-        }
-
-        .chart-container h3 {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            color: var(--text-primary);
-        }
-
-        .sections-tabs {
-            background: var(--bg-surface);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border-color);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: var(--card-shadow);
-            margin-bottom: 24px;
-        }
-
-        .tab-headers {
-            display: flex;
-            gap: 12px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 12px;
-            margin-bottom: 20px;
-        }
-
-        .tab-btn {
+        .dismiss-btn {
             background: none;
             border: none;
-            color: var(--text-secondary);
-            font-size: 15px;
-            font-weight: 500;
-            padding: 8px 16px;
+            color: inherit;
             cursor: pointer;
-            border-radius: 8px;
-            transition: all 0.2s ease;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
         }
 
-        .tab-btn:hover {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.03);
+        .dismiss-btn:hover {
+            opacity: 1;
         }
 
-        .tab-btn.active {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        /* --- Grid Layout --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
         }
 
-        .tab-content {
-            display: none;
+        .panel {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
         }
 
-        .tab-content.active {
-            display: block;
+        .panel h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .table-responsive {
-            width: 100%;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
+        /* Span configurations */
+        .span-8 { grid-column: span 8; }
+        .span-4 { grid-column: span 4; }
+        .span-6 { grid-column: span 6; }
+        .span-12 { grid-column: span 12; }
+
+        /* --- Custom charts and tables --- */
+        .chart-wrapper {
+            position: relative;
+            height: 280px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            text-align: left;
-            font-size: 14px;
-            min-width: 600px;
+            font-size: 13px;
         }
 
         th {
+            text-align: left;
+            padding: 10px 12px;
             color: var(--text-secondary);
             font-weight: 500;
-            padding: 12px 16px;
             border-bottom: 1px solid var(--border-color);
         }
 
         td {
-            padding: 14px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            vertical-align: middle;
         }
 
         .badge {
             display: inline-block;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
             text-transform: uppercase;
         }
 
-        .badge-long {
-            background: rgba(59, 130, 246, 0.15);
-            color: var(--color-long);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-        }
+        .badge-long { background: rgba(0, 195, 255, 0.1); color: var(--color-long); }
+        .badge-short { background: rgba(239, 68, 68, 0.1); color: var(--color-short); }
+        .badge-win { background: rgba(16, 185, 129, 0.1); color: var(--color-win); }
+        .badge-loss { background: rgba(244, 63, 94, 0.1); color: var(--color-loss); }
 
-        .badge-short {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--color-short);
+        .btn-action-close {
+            background: rgba(239, 68, 68, 0.1);
             border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--color-short);
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.2s;
         }
 
-        .badge-win {
-            background: var(--color-win-glow);
-            color: var(--color-win);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+        .btn-action-close:hover {
+            background: var(--color-short);
+            color: #fff;
         }
 
-        .badge-loss {
-            background: var(--color-loss-glow);
-            color: var(--color-loss);
-            border: 1px solid rgba(244, 63, 94, 0.3);
-        }
-
-        .pnl-positive {
-            color: var(--color-win);
-            font-weight: 600;
-        }
-
-        .pnl-negative {
-            color: var(--color-loss);
-            font-weight: 600;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 48px;
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-        
-        .penalty-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        /* --- Metrics block --- */
+        .metrics-list {
+            display: flex;
+            flex-direction: column;
             gap: 16px;
+            height: 100%;
+            justify-content: space-around;
         }
-        
-        .penalty-card {
-            background: rgba(239, 68, 68, 0.05);
-            border: 1px solid rgba(239, 68, 68, 0.15);
-            border-radius: 12px;
-            padding: 16px;
+
+        .metric-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        
-        .penalty-card h4 {
-            font-size: 15px;
-            color: var(--text-primary);
+
+        .metric-item {
+            flex: 1;
         }
-        
-        .penalty-card p {
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .metric-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 4px 0;
+        }
+
+        /* --- Asset breakdown P&L list --- */
+        .asset-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .asset-row {
+            display: flex;
+            align-items: center;
+            font-family: var(--font-mono);
             font-size: 12px;
+        }
+
+        .asset-name {
+            width: 70px;
+            font-weight: bold;
+        }
+
+        .asset-progress-container {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 0 12px;
+        }
+
+        .asset-progress-bar {
+            height: 100%;
+            border-radius: 6px;
+        }
+
+        .asset-val {
+            width: 90px;
+            text-align: right;
+        }
+
+        .pnl-positive { color: var(--color-win); }
+        .pnl-negative { color: var(--color-loss); }
+
+        /* --- Signal Funnel --- */
+        .funnel-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .funnel-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .funnel-bar-bg {
+            background: rgba(255,255,255,0.03);
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .funnel-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+
+        /* --- Hourly Heatmap --- */
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .heatmap-box {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .heatmap-tooltip {
+            visibility: hidden;
+            background-color: #000;
+            color: #fff;
+            text-align: center;
+            padding: 5px;
+            border-radius: 4px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+
+        .heatmap-box:hover .heatmap-tooltip {
+            visibility: visible;
+        }
+
+        /* --- Control Center --- */
+        .control-grid {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .mode-selectors {
+            display: flex;
+            gap: 8px;
+        }
+
+        .mode-btn {
+            background: #151821;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            background: #1a1e2a;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 10px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            transition: all 0.3s;
+        }
+
+        .action-btn:hover {
+            background: #252b3d;
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        .action-btn.red {
+            border-color: rgba(239, 68, 68, 0.4);
             color: var(--color-short);
-            margin-top: 4px;
         }
 
-        /* Responsive Layout Overrides */
-        @media (max-width: 900px) {
-            body { padding: 12px; }
-            header { flex-direction: column; align-items: flex-start; gap: 12px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .charts-grid { grid-template-columns: 1fr; }
-            .tab-headers { flex-wrap: wrap; }
-            .analytics-grid { grid-template-columns: 1fr !important; }
-            .funnel-and-health-grid { grid-template-columns: 1fr !important; }
-            .analytics-sub-grid { grid-template-columns: 1fr !important; }
+        .action-btn.red:hover {
+            background: var(--color-short);
+            color: #fff;
         }
 
-        @media (max-width: 500px) {
-            .stats-grid { grid-template-columns: 1fr; }
-            .logo-section h1 { font-size: 20px; }
+        .status-footer-note {
+            width: 100%;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+
+        /* Responsive Layout */
+        @media (max-width: 1024px) {
+            .span-8, .span-4, .span-6 {
+                grid-column: span 12;
+            }
         }
     </style>
 </head>
 <body>
 
+    <!-- --- Header --- -->
     <header>
-        <div class="logo-section">
-            <h1>AlphaQuant AI</h1>
-            <p>Live Scalping Terminal & Analyzer (Stockholm Time)</p>
+        <div class="brand">
+            <h1>🚀 ALPHAQUANT</h1>
+            <div class="live-indicator">
+                <span class="pulse-dot"></span>
+                <span id="bot-status-text">LIVE</span>
+            </div>
         </div>
-        <div class="status-badge">
-            <span id="bot-status-dot" class="status-dot"></span>
-            <span id="bot-status-text">Checking Status...</span>
+        <div class="header-stats">
+            <div class="header-stat-item">
+                <span class="header-stat-label">💰 BALANCE:</span>
+                <strong id="header-balance">$10,000.00</strong>
+            </div>
+            <div class="header-stat-item">
+                <span class="header-stat-label">🎯 WIN RATE:</span>
+                <strong id="header-winrate">0.00%</strong>
+            </div>
+            <div class="header-stat-item">
+                <span class="header-stat-label">📊 PROFIT FACTOR:</span>
+                <strong id="header-profit-factor">0.00</strong>
+            </div>
+            <div class="header-stat-item">
+                <span class="header-stat-label">⚠️ ALERTS:</span>
+                <strong id="header-alerts-count">0</strong>
+            </div>
         </div>
     </header>
 
-    <div class="stats-grid">
-        <div class="stat-card">
-            <p>TOTAL PROFIT</p>
-            <h2 id="stat-total-pnl">$0.00</h2>
-        </div>
-        <div class="stat-card">
-            <p>WIN RATE</p>
-            <h2 id="stat-win-rate">0.00%</h2>
-            <span id="stat-win-rate-split" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: block;">LONG: 0.0% | SHORT: 0.0%</span>
-        </div>
-        <div class="stat-card">
-            <p>TOTAL TRADES</p>
-            <h2 id="stat-total-trades">0</h2>
-        </div>
-        <div class="stat-card">
-            <p>PROFIT FACTOR</p>
-            <h2 id="stat-profit-factor">0.00</h2>
-        </div>
+    <!-- --- Alerts Banner Container --- -->
+    <div id="alerts-container" class="alerts-container">
+        <!-- Banners will be rendered dynamically -->
     </div>
 
-    <div class="charts-grid">
-        <div class="chart-container">
-            <h3>Cumulative Profit Performance (Last 250 Trades)</h3>
-            <canvas id="pnlChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <h3>Asset Win Rates</h3>
-            <canvas id="assetChart"></canvas>
-        </div>
-    </div>
+    <!-- --- Main Dashboard Grid --- -->
+    <div class="dashboard-grid">
 
-    <div class="sections-tabs">
-        <div class="tab-headers">
-            <button class="tab-btn active" onclick="switchTab('active-trades-tab')">Active Trades</button>
-            <button class="tab-btn" onclick="switchTab('analytics-tab')">Analytics & Calibration</button>
-            <button class="tab-btn" onclick="switchTab('asset-performance-tab')">Asset Breakdown</button>
-            <button class="tab-btn" onclick="switchTab('penalty-box-tab')">Penalty Box</button>
-            <button class="tab-btn" onclick="switchTab('trade-history-tab')">Recent Trade Log</button>
-            <button class="tab-btn" onclick="switchTab('config-tab')">Configuration</button>
+        <!-- Module 1: Cumulative Performance Chart -->
+        <div class="panel span-8">
+            <h3>📈 CUMULATIVE PERFORMANCE (Last 250 Trades)</h3>
+            <div class="chart-wrapper">
+                <canvas id="pnlChart"></canvas>
+            </div>
         </div>
 
-        <!-- Tab: Active Trades -->
-        <div id="active-trades-tab" class="tab-content active">
-            <!-- V8.5 Exposure & Correlation Alerts -->
-            <div id="exposure-alerts-container" style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap;">
-                <div class="stat-card" style="padding: 12px 20px; flex: 1; min-width: 200px;">
-                    <p style="font-size: 11px;">TOTAL OPEN EXPOSURE</p>
-                    <h3 id="total-open-exposure" style="font-size: 18px; margin-top: 4px;">$0.00</h3>
+        <!-- Module 2: Key Metrics -->
+        <div class="panel span-4">
+            <h3>📊 KEY METRICS</h3>
+            <div class="metrics-list">
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-label">LONG WIN RATE</div>
+                        <div id="metric-long-win-rate" class="metric-value">0.0%</div>
+                        <div id="metric-long-trades" class="metric-sub">0 trades</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">SHORT WIN RATE</div>
+                        <div id="metric-short-win-rate" class="metric-value">0.0%</div>
+                        <div id="metric-short-trades" class="metric-sub">0 trades</div>
+                    </div>
                 </div>
-                <div id="correlation-warning-card" class="penalty-card" style="display: none; flex: 2; min-width: 300px; padding: 12px 20px; background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3);">
-                    <div>
-                        <h4 style="color: #f59e0b; font-size:13px; font-weight:600;">⚠️ Correlation Warning Active</h4>
-                        <p style="color: var(--text-secondary); font-size:11px;">BTC/USDT and ETH/USDT are both held open in the same direction.</p>
+                <div class="divider"></div>
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-label">AVG WINNER</div>
+                        <div id="metric-avg-winner" class="metric-value pnl-positive">+$0.00</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">AVG LOSER</div>
+                        <div id="metric-avg-loser" class="metric-value pnl-negative">-$0.00</div>
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div class="metric-row">
+                    <div class="metric-item">
+                        <div class="metric-label">MAX DRAWDOWN</div>
+                        <div id="metric-max-drawdown" class="metric-value pnl-negative">0.0%</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">SHARPE RATIO</div>
+                        <div id="metric-sharpe" class="metric-value">0.00</div>
                     </div>
                 </div>
             </div>
-
-            <div class="table-responsive">
-                <table id="active-trades-table">
-                    <thead>
-                        <tr>
-                            <th>Asset</th>
-                            <th>Direction</th>
-                            <th>Entry Price</th>
-                            <th>Stop Loss</th>
-                            <th>Take Profit</th>
-                            <th>AI Probability</th>
-                            <th>Position Size</th>
-                            <th>Unrealized P&L</th>
-                            <th>Time in Trade</th>
-                        </tr>
-                    </thead>
-                    <tbody id="active-trades-body">
-                        <!-- Dynamic Rows -->
-                    </tbody>
-                </table>
-            </div>
-            <div id="active-trades-empty" class="empty-state">No active trades currently open.</div>
         </div>
 
-        <!-- Tab: Analytics & Calibration (V8.5 Upgrade) -->
-        <div id="analytics-tab" class="tab-content">
-            <div class="analytics-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                <div class="chart-container" style="height: 350px;">
-                    <h3>Reliability Curve (OOS Calibration vs True Win Rate)</h3>
-                    <canvas id="calibrationChart"></canvas>
-                </div>
-                <div class="chart-container" style="height: 350px;">
-                    <h3>Rolling Brier Score Trend (Window = 15)</h3>
-                    <canvas id="brierChart"></canvas>
-                </div>
-            </div>
+        <!-- Module 3: Active Positions -->
+        <div class="panel span-12">
+            <h3 style="margin-bottom: 12px;">
+                <span>🎯 ACTIVE POSITIONS (<span id="active-positions-count">0</span>)</span>
+                <span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">
+                    TOTAL EXPOSURE: <strong id="active-total-exposure">$0.00</strong>
+                </span>
+            </h3>
+            <table id="active-trades-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Entry</th>
+                        <th>Current</th>
+                        <th>P&L</th>
+                        <th>P&L %</th>
+                        <th>Time</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="active-trades-body">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+            <div id="active-trades-empty" style="text-align: center; padding: 20px; color: var(--text-secondary); font-size: 13px;">No active trades currently open.</div>
+        </div>
 
-            <div class="analytics-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
-                <div class="stat-card">
-                    <p>SHARPE RATIO</p>
-                    <h2 id="anal-sharpe">0.00</h2>
-                    <span style="font-size: 11px; color: var(--text-secondary);">Risk-adjusted return</span>
-                </div>
-                <div class="stat-card">
-                    <p>SORTINO RATIO</p>
-                    <h2 id="anal-sortino">0.00</h2>
-                    <span style="font-size: 11px; color: var(--text-secondary);">Downside deviation metric</span>
-                </div>
-                <div class="stat-card">
-                    <p>MAX DRAWDOWN</p>
-                    <h2 id="anal-max-dd" class="pnl-negative">0.00%</h2>
-                    <span id="anal-max-dd-cash" style="font-size: 11px; color: var(--text-secondary);">$0.00</span>
-                </div>
-                <div class="stat-card">
-                    <p>CURRENT DRAWDOWN</p>
-                    <h2 id="anal-curr-dd">0.00%</h2>
-                    <span style="font-size: 11px; color: var(--text-secondary);">From equity peak</span>
-                </div>
+        <!-- Module 4: Asset Breakdown -->
+        <div class="panel span-6">
+            <h3>📊 ASSET BREAKDOWN</h3>
+            <div id="asset-breakdown-list" class="asset-list">
+                <!-- Bars rendered dynamically -->
             </div>
+        </div>
 
-            <div class="funnel-and-health-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px;">
-                <div class="chart-container" style="height: 300px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <h3>Signal Filter Funnel</h3>
-                    <div id="funnel-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-                                <span>Signals Generated</span>
-                                <span id="funnel-gen">0</span>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
-                                <div id="funnel-gen-bar" style="background: var(--color-long); width: 100%; height: 100%;"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-                                <span>Regime Filter Rejections (Chop/ADX)</span>
-                                <span id="funnel-reg">0</span>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
-                                <div id="funnel-reg-bar" style="background: var(--color-short); width: 0%; height: 100%;"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-                                <span>Threshold Rejections (&lt;60%)</span>
-                                <span id="funnel-thresh">0</span>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
-                                <div id="funnel-thresh-bar" style="background: #f59e0b; width: 0%; height: 100%;"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
-                                <span>Executed Trades</span>
-                                <span id="funnel-exec">0</span>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden;">
-                                <div id="funnel-exec-bar" style="background: var(--color-win); width: 0%; height: 100%;"></div>
-                            </div>
-                        </div>
+        <!-- Module 5: Signal Funnel -->
+        <div class="panel span-6">
+            <h3>🔥 SIGNAL FUNNEL</h3>
+            <div class="funnel-container">
+                <div>
+                    <div class="funnel-bar-label">
+                        <span>Raw Signals</span>
+                        <strong id="funnel-gen">0</strong>
+                    </div>
+                    <div class="funnel-bar-bg">
+                        <div id="funnel-gen-bar" class="funnel-bar-fill" style="background: var(--color-long); width: 100%;"></div>
                     </div>
                 </div>
-
-                <div class="chart-container" style="height: 300px;">
-                    <h3>Model Health & Retrain Status</h3>
-                    <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 15px; font-size: 13px;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Last Retrained:</span>
-                            <strong id="retrain-last">N/A</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Days Since Retrained:</span>
-                            <strong id="retrain-days">N/A</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Active Threshold:</span>
-                            <strong id="active-global-threshold">60.0%</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: var(--text-secondary);">Calibration Quality:</span>
-                            <span id="calibration-alert-badge" class="badge">Checking...</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Est. Fees Paid:</span>
-                            <strong id="total-fees-paid">$0.00</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Gross P&L:</span>
-                            <strong id="gross-pnl-val" class="pnl-positive">$0.00</strong>
-                        </div>
+                <div>
+                    <div class="funnel-bar-label">
+                        <span>Regime Filter (Chop/ADX)</span>
+                        <strong id="funnel-reg">0</strong>
+                    </div>
+                    <div class="funnel-bar-bg">
+                        <div id="funnel-reg-bar" class="funnel-bar-fill" style="background: var(--color-short); width: 0%;"></div>
                     </div>
                 </div>
-            </div>
-
-            <div class="analytics-sub-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                <div class="chart-container" style="height: 350px; overflow-y: auto;">
-                    <h3>Performance by Signal Type</h3>
-                    <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-                        <thead>
-                            <tr>
-                                <th>Signal Type</th>
-                                <th>Trades</th>
-                                <th>Win Rate</th>
-                                <th>Net PnL</th>
-                            </tr>
-                        </thead>
-                        <tbody id="signal-perf-body">
-                            <!-- Dynamic rows -->
-                        </tbody>
-                    </table>
+                <div>
+                    <div class="funnel-bar-label">
+                        <span>Threshold Match</span>
+                        <strong id="funnel-thresh">0</strong>
+                    </div>
+                    <div class="funnel-bar-bg">
+                        <div id="funnel-thresh-bar" class="funnel-bar-fill" style="background: #f59e0b; width: 0%;"></div>
+                    </div>
                 </div>
-                <div class="chart-container" style="height: 350px;">
-                    <h3>Win Rate by Day of Week</h3>
-                    <canvas id="weeklyPerfChart"></canvas>
+                <div>
+                    <div class="funnel-bar-label">
+                        <span>Executed Trades</span>
+                        <strong id="funnel-exec">0</strong>
+                    </div>
+                    <div class="funnel-bar-bg">
+                        <div id="funnel-exec-bar" class="funnel-bar-fill" style="background: var(--color-win); width: 0%;"></div>
+                    </div>
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 10px;">
+                    💡 <span id="funnel-rejection-rate">0%</span> signals rejected by filters.
                 </div>
             </div>
         </div>
 
-        <!-- Tab: Asset Performance -->
-        <div id="asset-performance-tab" class="tab-content">
-            <div class="table-responsive">
-                <table id="asset-performance-table">
-                    <thead>
-                        <tr>
-                            <th>Asset</th>
-                            <th>Total Trades</th>
-                            <th>Wins</th>
-                            <th>Losses</th>
-                            <th>Win Rate</th>
-                            <th>Net Profit</th>
-                        </tr>
-                    </thead>
-                    <tbody id="asset-performance-body">
-                        <!-- Dynamic Rows -->
-                    </tbody>
-                </table>
+        <!-- Module 6: Performance by Hour (Heatmap) -->
+        <div class="panel span-6">
+            <h3>⏰ PERFORMANCE BY HOUR</h3>
+            <div class="heatmap-grid" id="hourly-heatmap-grid">
+                <!-- Heatmap grid generated dynamically -->
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px; display: flex; justify-content: space-between;">
+                <span>⚠️ Red = Hours with &lt;40% Win Rate</span>
+                <span>Green = Hours with &ge;40% Win Rate</span>
             </div>
         </div>
 
-        <!-- Tab: Penalty Box -->
-        <div id="penalty-box-tab" class="tab-content">
-            <div id="penalty-box-body" class="penalty-grid">
-                <!-- Dynamic Penalty Cards -->
-            </div>
-            <div id="penalty-box-empty" class="empty-state">All assets are active. No penalty blocks.</div>
+        <!-- Module 7: Recent Trades -->
+        <div class="panel span-6">
+            <h3>📋 RECENT TRADES (Last 5)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Asset</th>
+                        <th>Side</th>
+                        <th>P&L</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-trades-body">
+                    <!-- Rendered dynamically -->
+                </tbody>
+            </table>
         </div>
 
-        <!-- Tab: Trade History -->
-        <div id="trade-history-tab" class="tab-content">
-            <div class="table-responsive">
-                <table id="trade-history-table">
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Asset</th>
-                            <th>Direction</th>
-                            <th>Entry Price</th>
-                            <th>Exit Price</th>
-                            <th>Status</th>
-                            <th>AI Probability</th>
-                            <th>PnL ($)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="trade-history-body">
-                        <!-- Dynamic Rows -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Tab: Configuration -->
-        <div id="config-tab" class="tab-content">
-            <div class="card" style="padding: 25px; background: #181922; border: 1px solid #232530; border-radius: 8px;">
-                <h3 style="margin-bottom: 8px; color: #00c3ff;">Trading Mode Configuration</h3>
-                <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Configure which trade directions the machine learning models are permitted to execute globally.</p>
-                <div class="config-controls" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 15px;">
-                    <button id="mode-btn-both" class="btn active" onclick="setTradeMode('BOTH')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #00c3ff; background: rgba(0,195,255,0.1); color: #00c3ff; transition: all 0.3s ease;">BOTH (Long & Short)</button>
-                    <button id="mode-btn-long" class="btn" onclick="setTradeMode('LONG_ONLY')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #3b3d4a; background: #1c1d24; color: #aaa; transition: all 0.3s ease;">LONG ONLY</button>
-                    <button id="mode-btn-short" class="btn" onclick="setTradeMode('SHORT_ONLY')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #3b3d4a; background: #1c1d24; color: #aaa; transition: all 0.3s ease;">SHORT ONLY</button>
-                    <button id="mode-btn-off" class="btn" onclick="setTradeMode('OFF')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #ff4a4a; background: rgba(255,74,74,0.05); color: #ff4a4a; transition: all 0.3s ease;">OFF (Stop Trading)</button>
+        <!-- Module 8: Control Center -->
+        <div class="panel span-12">
+            <h3>⚙️ CONTROL CENTER</h3>
+            <div class="control-grid">
+                <div class="mode-selectors">
+                    <button id="mode-btn-both" class="mode-btn" onclick="setTradeMode('BOTH')">○ BOTH</button>
+                    <button id="mode-btn-long" class="mode-btn" onclick="setTradeMode('LONG_ONLY')">○ LONG ONLY</button>
+                    <button id="mode-btn-short" class="mode-btn" onclick="setTradeMode('SHORT_ONLY')">○ SHORT ONLY</button>
+                    <button id="mode-btn-off" class="mode-btn" onclick="setTradeMode('OFF')">○ OFF</button>
                 </div>
-                <p id="trade-mode-status" style="font-size: 13px; color: #666; font-style: italic;">Current Mode: BOTH</p>
+                <div class="action-buttons">
+                    <button class="action-btn" onclick="triggerRetrain()">🔄 Retrain Model</button>
+                    <button class="action-btn" onclick="exportReport()">📊 Export Report</button>
+                    <button class="action-btn red" onclick="emergencyStop()">⏹ Emergency Stop</button>
+                </div>
+            </div>
+            <div class="status-footer-note" id="control-footer-note">
+                No active freezes in penalty box.
             </div>
         </div>
+
     </div>
 
+    <!-- --- Javascript Code --- -->
     <script>
         let pnlChart = null;
-        let assetChart = null;
-        let calibrationChart = null;
-        let brierChart = null;
-        let weeklyPerfChart = null;
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
-        }
+        let dismissedAlerts = new Set();
 
         async function fetchDashboardData() {
             try {
                 // 1. Fetch State
                 const stateRes = await fetch('/api/state');
                 const state = await stateRes.json();
-                updateStatusBadge(state);
-                updateActiveTrades(state.active_trades, state.live_prices);
-                updatePenaltyBox(state.asset_penalty_box);
-                updateSignalFunnel(state.signal_funnel);
-                updateTradeModeUI(state.trade_mode || 'BOTH');
-
+                
                 // 2. Fetch Stats
                 const statsRes = await fetch('/api/stats');
                 const stats = await statsRes.json();
-                updateStatCards(stats);
-                updateAssetPerformanceTable(stats.asset_breakdown);
-                renderAssetChart(stats.asset_breakdown);
-                updateAnalyticsPanel(stats);
-                renderBrierChart(stats.rolling_brier);
-                renderWeeklyPerfChart(stats.weekly_performance);
 
-                // 3. Fetch Trades History
+                // 3. Fetch Trade History
                 const tradesRes = await fetch('/api/trades');
                 const trades = await tradesRes.json();
-                updateTradeHistory(trades);
-                renderPnlChart(trades);
 
-                // 4. Fetch Calibration (OOS Curve)
-                renderCalibrationChart();
+                // Update UI panels
+                updateHeader(state, stats);
+                updateAlerts(state, stats);
+                renderPnlChart(trades);
+                updateKeyMetrics(stats);
+                updateActiveTrades(state.active_trades, state.live_prices);
+                updateAssetBreakdown(stats.asset_breakdown);
+                updateSignalFunnel(state.signal_funnel);
+                updateHourlyHeatmap(stats.hourly_performance);
+                updateRecentTrades(trades);
+                updateControlCenter(state);
 
             } catch (e) {
                 console.error("Dashboard refresh failed: ", e);
             }
         }
 
-        function updateStatusBadge(state) {
-            const dot = document.getElementById('bot-status-dot');
-            const text = document.getElementById('bot-status-text');
+        function updateHeader(state, stats) {
+            const balance = 10000.0 + stats.net_pnl;
+            document.getElementById('header-balance').innerText = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('header-winrate').innerText = `${stats.win_rate.toFixed(2)}%`;
+            document.getElementById('header-profit-factor').innerText = stats.profit_factor.toFixed(2);
             
-            if (state.is_active) {
-                dot.className = "status-dot active";
-                text.innerText = `Active (Last update: ${state.last_update})`;
-            } else {
-                dot.className = "status-dot inactive";
-                text.innerText = `Inactive (Offline / Idle since ${state.last_update || 'N/A'})`;
+            // Calculate alert count
+            let alerts = 0;
+            if (stats.win_rate < 45) alerts++;
+            if (Object.keys(state.asset_penalty_box || {}).length > 0) alerts++;
+            document.getElementById('header-alerts-count').innerText = alerts;
+        }
+
+        function updateAlerts(state, stats) {
+            const container = document.getElementById('alerts-container');
+            container.innerHTML = '';
+            
+            // Alert 1: Win Rate under 45%
+            if (stats.win_rate < 45 && !dismissedAlerts.has('winrate')) {
+                const banner = document.createElement('div');
+                banner.className = 'alert-banner red';
+                banner.innerHTML = `
+                    <span>🔴 WIN RATE BELOW 45% THRESHOLD (Current: ${stats.win_rate.toFixed(2)}%)</span>
+                    <button class="dismiss-btn" onclick="dismissAlert('winrate')">[Dismiss]</button>
+                `;
+                container.appendChild(banner);
             }
+
+            // Alert 2: Penalty Box
+            const pbAssets = Object.keys(state.asset_penalty_box || {});
+            if (pbAssets.length > 0 && !dismissedAlerts.has('penalty')) {
+                const banner = document.createElement('div');
+                banner.className = 'alert-banner yellow';
+                banner.innerHTML = `
+                    <span>🟡 ${pbAssets.length} ASSETS IN PENALTY BOX: ${pbAssets.join(', ')}</span>
+                    <button class="dismiss-btn" onclick="dismissAlert('penalty')">[Dismiss]</button>
+                `;
+                container.appendChild(banner);
+            }
+        }
+
+        function dismissAlert(key) {
+            dismissedAlerts.add(key);
+            const alertsCount = document.getElementById('header-alerts-count');
+            let current = parseInt(alertsCount.innerText);
+            if (current > 0) alertsCount.innerText = current - 1;
+            fetchDashboardData();
+        }
+
+        function updateKeyMetrics(stats) {
+            document.getElementById('metric-long-win-rate').innerText = `${stats.long_win_rate.toFixed(1)}%`;
+            document.getElementById('metric-long-trades').innerText = `${stats.long_trades} trades`;
+            
+            document.getElementById('metric-short-win-rate').innerText = `${stats.short_win_rate.toFixed(1)}%`;
+            document.getElementById('metric-short-trades').innerText = `${stats.short_trades} trades`;
+            
+            document.getElementById('metric-avg-winner').innerText = `+$${stats.avg_win.toFixed(2)}`;
+            document.getElementById('metric-avg-loser').innerText = `-$${Math.abs(stats.avg_loss).toFixed(2)}`;
+            
+            document.getElementById('metric-max-drawdown').innerText = `${stats.max_drawdown_pct.toFixed(1)}%`;
+            document.getElementById('metric-sharpe').innerText = stats.sharpe.toFixed(2);
         }
 
         function updateActiveTrades(activeTrades, livePrices) {
             const body = document.getElementById('active-trades-body');
             const empty = document.getElementById('active-trades-empty');
-            const table = document.getElementById('active-trades-table');
+            const countEl = document.getElementById('active-positions-count');
+            const exposureEl = document.getElementById('active-total-exposure');
             
             body.innerHTML = '';
+            countEl.innerText = activeTrades ? activeTrades.length : 0;
+            
             if (!activeTrades || activeTrades.length === 0) {
                 empty.style.display = 'block';
-                table.style.display = 'none';
-                document.getElementById('total-open-exposure').innerText = '$0.00';
-                document.getElementById('correlation-warning-card').style.display = 'none';
+                document.getElementById('active-trades-table').style.display = 'none';
+                exposureEl.innerText = '$0.00';
                 return;
             }
             
             empty.style.display = 'none';
-            table.style.display = 'table';
+            document.getElementById('active-trades-table').style.display = 'table';
             
             let totalExposure = 0;
-            let hasBtcLong = false, hasEthLong = false;
-            let hasBtcShort = false, hasEthShort = false;
-
             activeTrades.forEach(t => {
                 const currentPrice = (livePrices && livePrices[t.asset]) || t.entry;
                 
-                // Calculate Unrealized PnL
+                // Calculate P&L
                 let unpnl = 0;
                 if (t.direction === "LONG") {
                     unpnl = t.position_size * ((currentPrice - t.entry) / t.entry);
@@ -728,124 +830,190 @@
                     unpnl = t.position_size * ((t.entry - currentPrice) / t.entry);
                 }
                 const totalPnl = unpnl + (t.locked_pnl || 0.0);
+                const pnlPct = (totalPnl / t.position_size) * 100.0;
                 
-                // Calculate Time in Trade
+                // Duration
                 let durationStr = "N/A";
                 if (t.entry_time) {
-                    const elapsedSec = Math.floor(Date.now() / 1000 - t.entry_time);
-                    const h = Math.floor(elapsedSec / 3600);
-                    const m = Math.floor((elapsedSec % 3600) / 60);
+                    const elapsed = Math.floor(Date.now() / 1000 - t.entry_time);
+                    const h = Math.floor(elapsed / 3600);
+                    const m = Math.floor((elapsed % 3600) / 60);
                     durationStr = `${h}h ${m}m`;
                 }
                 
                 totalExposure += t.position_size;
                 
-                if (t.asset === "BTC/USDT") {
-                    if (t.direction === "LONG") hasBtcLong = true;
-                    else hasBtcShort = true;
-                }
-                if (t.asset === "ETH/USDT") {
-                    if (t.direction === "LONG") hasEthLong = true;
-                    else hasEthShort = true;
-                }
-
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><strong>${t.asset}</strong>${t.half_closed ? ' <span style="font-size:10px; color:#00c3ff; font-weight:bold;">(Runner)</span>' : ''}</td>
-                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
+                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction === 'LONG' ? 'LONG ▲' : 'SHORT ▼'}</span></td>
                     <td>$${t.entry.toFixed(4)}</td>
-                    <td>$${t.sl.toFixed(4)}</td>
-                    <td>$${t.tp.toFixed(4)}</td>
-                    <td>${t.ai_prob.toFixed(2)}%</td>
-                    <td>$${t.position_size.toFixed(2)}</td>
+                    <td>$${currentPrice.toFixed(4)}</td>
                     <td><span class="${totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</span></td>
+                    <td><span class="${totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${totalPnl >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%</span></td>
                     <td>${durationStr}</td>
+                    <td><button class="btn-action-close" onclick="closePosition('${t.asset}')">[⏹]</button></td>
                 `;
                 body.appendChild(tr);
             });
-
-            document.getElementById('total-open-exposure').innerText = `$${totalExposure.toFixed(2)}`;
             
-            if ((hasBtcLong && hasEthLong) || (hasBtcShort && hasEthShort)) {
-                document.getElementById('correlation-warning-card').style.display = 'flex';
-            } else {
-                document.getElementById('correlation-warning-card').style.display = 'none';
-            }
+            exposureEl.innerText = `$${totalExposure.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
-        function updatePenaltyBox(penaltyBox) {
-            const body = document.getElementById('penalty-box-body');
-            const empty = document.getElementById('penalty-box-empty');
-            
-            body.innerHTML = '';
-            const assets = Object.keys(penaltyBox || {});
-            if (assets.length === 0) {
-                empty.style.display = 'block';
-                return;
-            }
-            
-            empty.style.display = 'none';
-            assets.forEach(a => {
-                // 🟢 V8.5 date formatting using Sweden/Stockholm YYYY-MM-DD HH:MM:SS style locale
-                const expiry = new Date(penaltyBox[a] * 1000).toLocaleString('sv-SE');
-                const card = document.createElement('div');
-                card.className = 'penalty-card';
-                card.style.display = 'flex';
-                card.style.justifyContent = 'space-between';
-                card.style.alignItems = 'center';
-                card.style.padding = '15px';
-                card.innerHTML = `
-                    <div style="flex-grow: 1;">
-                        <h4 style="margin: 0 0 4px 0; color: #fff;">${a}</h4>
-                        <p style="margin: 0 0 8px 0; color: #888; font-size: 11px;">Performance Block Active</p>
-                        <span class="badge badge-loss" style="font-size:10px;">Expires: ${expiry}</span>
-                    </div>
-                    <button onclick="unfreezeAsset('${a}')" style="background: rgba(0, 195, 255, 0.1); border: 1px solid #00c3ff; color: #00c3ff; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; transition: all 0.3s; margin-left: 10px;">Release</button>
-                `;
-                body.appendChild(card);
-            });
-        }
-
-        function setTradeMode(mode) {
+        function closePosition(asset) {
+            if (!confirm(`Are you sure you want to close position for ${asset}?`)) return;
             fetch('/api/config', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ trade_mode: mode })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ close_trade: asset })
             })
             .then(res => res.json())
             .then(data => {
-                if (data.status === 'success') {
-                    updateTradeModeUI(mode);
-                } else {
-                    alert('Failed to update trade mode: ' + data.message);
-                }
-            })
-            .catch(err => console.error('Error updating trade mode:', err));
+                if (data.status === 'success') fetchDashboardData();
+            });
         }
 
-        function unfreezeAsset(asset) {
-            if (!confirm(`Are you sure you want to release ${asset} from the penalty box?`)) return;
+        function updateAssetBreakdown(breakdown) {
+            const container = document.getElementById('asset-breakdown-list');
+            container.innerHTML = '';
+            
+            const assets = Object.keys(breakdown || {}).sort((a,b) => breakdown[b].pnl - breakdown[a].pnl);
+            if (assets.length === 0) {
+                container.innerHTML = `<div style="text-align:center; font-size:12px; color:var(--text-secondary);">No historical asset data.</div>`;
+                return;
+            }
+
+            // Find absolute max PNL to scale progress bars
+            const maxPnl = Math.max(...assets.map(a => Math.abs(breakdown[a].pnl)), 1.0);
+
+            assets.forEach(a => {
+                const data = breakdown[a];
+                const wr = data.win_rate;
+                const pnl = data.pnl;
+                
+                // Scale width based on performance
+                const pctWidth = Math.min((Math.abs(pnl) / maxPnl) * 100, 100);
+                const barColor = pnl >= 0 ? 'var(--color-win)' : 'var(--color-loss)';
+                
+                const row = document.createElement('div');
+                row.className = 'asset-row';
+                row.innerHTML = `
+                    <span class="asset-name" style="cursor:pointer;" onclick="unfreezeAssetConfirm('${a}')">${a.split('/')[0]}</span>
+                    <div class="asset-progress-container">
+                        <div class="asset-progress-bar" style="width: ${pctWidth}%; background-color: ${barColor};"></div>
+                    </div>
+                    <span class="asset-val ${pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(1)} <span style="color:var(--text-secondary); font-size:10px;">(${wr.toFixed(0)}%)</span></span>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function unfreezeAssetConfirm(asset) {
+            if (!confirm(`Do you want to check/release ${asset} from the penalty box?`)) return;
             fetch('/api/config', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ unfreeze_asset: asset })
             })
             .then(res => res.json())
             .then(data => {
-                if (data.status === 'success') {
-                    fetchDashboardData();
-                } else {
-                    alert('Failed to release asset: ' + data.message);
-                }
-            })
-            .catch(err => console.error('Error unfreezing asset:', err));
+                if (data.status === 'success') fetchDashboardData();
+            });
         }
 
-        function updateTradeModeUI(mode) {
+        function updateSignalFunnel(funnel) {
+            if (!funnel) return;
+            const gen = funnel.generated || 1;
+            const reg = funnel.rejected_regime || 0;
+            const thresh = funnel.rejected_threshold || 0;
+            const exec = funnel.executed || 0;
+            
+            document.getElementById('funnel-gen').innerText = gen;
+            document.getElementById('funnel-reg').innerText = reg;
+            document.getElementById('funnel-thresh').innerText = thresh;
+            document.getElementById('funnel-exec').innerText = exec;
+            
+            // Percentages relative to generated raw signals
+            const regPct = gen > 0 ? (reg / gen) * 100 : 0;
+            const threshPct = gen > 0 ? (thresh / gen) * 100 : 0;
+            const execPct = gen > 0 ? (exec / gen) * 100 : 0;
+            
+            document.getElementById('funnel-gen-bar').style.width = '100%';
+            document.getElementById('funnel-reg-bar').style.width = `${regPct}%`;
+            document.getElementById('funnel-thresh-bar').style.width = `${threshPct}%`;
+            document.getElementById('funnel-exec-bar').style.width = `${execPct}%`;
+            
+            // Rejection rate calculation
+            const totalRejected = reg + thresh;
+            const rejectPct = gen > 0 ? (totalRejected / gen) * 100 : 0;
+            document.getElementById('funnel-rejection-rate').innerText = `${rejectPct.toFixed(1)}%`;
+        }
+
+        function updateHourlyHeatmap(hourlyPerf) {
+            const grid = document.getElementById('hourly-heatmap-grid');
+            grid.innerHTML = '';
+            
+            for (let h = 0; h < 24; h++) {
+                const data = hourlyPerf[h] || { trades: 0, win_rate: 0.0 };
+                const box = document.createElement('div');
+                box.className = 'heatmap-box';
+                
+                // Color coding based on win rate and trade count
+                if (data.trades === 0) {
+                    box.style.background = 'rgba(255, 255, 255, 0.02)';
+                    box.style.borderColor = 'var(--border-color)';
+                    box.style.color = 'var(--text-secondary)';
+                } else if (data.win_rate < 40) {
+                    box.style.background = 'rgba(239, 68, 68, 0.15)';
+                    box.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                    box.style.color = '#fca5a5';
+                } else {
+                    box.style.background = 'rgba(16, 185, 129, 0.15)';
+                    box.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+                    box.style.color = '#a7f3d0';
+                }
+                
+                const padHour = h.toString().padStart(2, '0');
+                box.innerHTML = `
+                    <span>${padHour}</span>
+                    <span class="heatmap-tooltip">Hour ${padHour}: ${data.win_rate.toFixed(1)}% WR (${data.trades} trades)</span>
+                `;
+                grid.appendChild(box);
+            }
+        }
+
+        function updateRecentTrades(trades) {
+            const body = document.getElementById('recent-trades-body');
+            body.innerHTML = '';
+            
+            const last5 = (trades || []).slice(0, 5);
+            if (last5.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-secondary);">No trade logs found.</td></tr>`;
+                return;
+            }
+            
+            last5.forEach(t => {
+                const tr = document.createElement('tr');
+                const isWin = (t.status || 'LOSS').toUpperCase() === 'WIN' || (t.status || 'LOSS').toUpperCase() === 'PROFIT';
+                const pnlVal = typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl || 0);
+                
+                let timeStr = t.timestamp || 'N/A';
+                if (timeStr.includes(' ')) {
+                    timeStr = timeStr.split(' ')[1];
+                }
+                
+                tr.innerHTML = `
+                    <td style="font-family: var(--font-mono); font-size:12px; color:var(--text-secondary);">${timeStr}</td>
+                    <td><strong>${t.asset}</strong></td>
+                    <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction}</span></td>
+                    <td><span class="${pnlVal >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnlVal >= 0 ? '+' : ''}$${pnlVal.toFixed(2)}</span></td>
+                    <td><span class="badge badge-${isWin ? 'win' : 'loss'}">${isWin ? '✅' : '❌'}</span></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function updateControlCenter(state) {
             const modes = ['BOTH', 'LONG_ONLY', 'SHORT_ONLY', 'OFF'];
             const buttonIds = {
                 'BOTH': 'mode-btn-both',
@@ -857,95 +1025,72 @@
             modes.forEach(m => {
                 const btn = document.getElementById(buttonIds[m]);
                 if (btn) {
-                    btn.style.background = '#1c1d24';
-                    btn.style.color = '#aaa';
-                    btn.style.borderColor = '#3b3d4a';
+                    btn.style.background = '#151821';
+                    btn.style.color = 'var(--text-secondary)';
+                    btn.style.borderColor = 'var(--border-color)';
+                    btn.innerText = `○ ${m.replace('_', ' ')}`;
                 }
             });
             
-            const activeBtn = document.getElementById(buttonIds[mode]);
+            const activeMode = state.trade_mode || 'BOTH';
+            const activeBtn = document.getElementById(buttonIds[activeMode]);
             if (activeBtn) {
-                if (mode === 'OFF') {
-                    activeBtn.style.background = 'rgba(255,74,74,0.1)';
-                    activeBtn.style.color = '#ff4a4a';
-                    activeBtn.style.borderColor = '#ff4a4a';
+                if (activeMode === 'OFF') {
+                    activeBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                    activeBtn.style.color = 'var(--color-short)';
+                    activeBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                    activeBtn.innerText = `● OFF`;
                 } else {
-                    activeBtn.style.background = 'rgba(0,195,255,0.1)';
-                    activeBtn.style.color = '#00c3ff';
-                    activeBtn.style.borderColor = '#00c3ff';
+                    activeBtn.style.background = 'rgba(0, 195, 255, 0.15)';
+                    activeBtn.style.color = 'var(--color-long)';
+                    activeBtn.style.borderColor = 'rgba(0, 195, 255, 0.4)';
+                    activeBtn.innerText = `● ${activeMode.replace('_', ' ')}`;
                 }
             }
             
-            const statusEl = document.getElementById('trade-mode-status');
-            if (statusEl) {
-                statusEl.innerText = `Current Mode: ${mode}`;
+            const pbAssets = Object.keys(state.asset_penalty_box || {});
+            const footerEl = document.getElementById('control-footer-note');
+            if (pbAssets.length > 0) {
+                footerEl.innerHTML = `⚠️ <strong>Warning:</strong> ${pbAssets.length} assets isolated in Penalty Box: <strong>${pbAssets.join(', ')}</strong>. Click asset name under Asset Breakdown to unfreeze.`;
+                footerEl.style.color = '#fde047';
+            } else {
+                footerEl.innerHTML = `✅ All target assets active. No performance freezes in penalty box.`;
+                footerEl.style.color = 'var(--text-secondary)';
             }
         }
 
-        function updateStatCards(stats) {
-            const pnlEl = document.getElementById('stat-total-pnl');
-            pnlEl.innerText = `$${stats.net_pnl.toFixed(2)}`; // Use Net profit after fees
-            pnlEl.className = stats.net_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-            
-            document.getElementById('stat-win-rate').innerText = `${stats.win_rate.toFixed(2)}%`;
-            
-            // 🟢 V8.5 Upgrade: Display direction-specific win rate statistics in sub-label
-            const longWr = typeof stats.long_win_rate === 'number' ? stats.long_win_rate : 0.0;
-            const shortWr = typeof stats.short_win_rate === 'number' ? stats.short_win_rate : 0.0;
-            const longN = typeof stats.long_trades === 'number' ? stats.long_trades : 0;
-            const shortN = typeof stats.short_trades === 'number' ? stats.short_trades : 0;
-            document.getElementById('stat-win-rate-split').innerText = 
-                `LONG: ${longWr.toFixed(1)}% (N=${longN}) | SHORT: ${shortWr.toFixed(1)}% (N=${shortN})`;
-                
-            document.getElementById('stat-total-trades').innerText = stats.total_trades;
-            document.getElementById('stat-profit-factor').innerText = stats.profit_factor.toFixed(2);
-        }
-
-        function updateAssetPerformanceTable(breakdown) {
-            const body = document.getElementById('asset-performance-body');
-            body.innerHTML = '';
-            
-            Object.keys(breakdown || {}).sort().forEach(asset => {
-                const data = breakdown[asset];
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>${asset}</strong></td>
-                    <td>${data.trades}</td>
-                    <td>${data.wins}</td>
-                    <td>${data.trades - data.wins}</td>
-                    <td>${data.win_rate.toFixed(2)}%</td>
-                    <td><span class="${data.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${data.pnl.toFixed(2)}</span></td>
-                `;
-                body.appendChild(tr);
+        function setTradeMode(mode) {
+            fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trade_mode: mode })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    fetchDashboardData();
+                } else {
+                    alert('Failed to update trade mode: ' + data.message);
+                }
             });
         }
 
-        function updateTradeHistory(trades) {
-            const body = document.getElementById('trade-history-body');
-            body.innerHTML = '';
-            
-            trades.forEach(t => {
-                const tr = document.createElement('tr');
-                const statusStr = t.status || 'LOSS';
-                const isWin = statusStr.toUpperCase() === 'WIN' || statusStr.toUpperCase() === 'PROFIT';
-                const entryVal = typeof t.entry === 'number' ? t.entry : parseFloat(t.entry || 0);
-                const exitVal = typeof t.exit_price === 'number' ? t.exit_price : parseFloat(t.exit_price || 0);
-                const probVal = typeof t.win_prob === 'number' ? t.win_prob : parseFloat(t.win_prob || 0);
-                const pnlVal = typeof t.pnl === 'number' ? t.pnl : parseFloat(t.pnl || 0);
-                const directionStr = t.direction || 'LONG';
-                
-                tr.innerHTML = `
-                    <td style="color: var(--text-secondary); font-size:12px;">${t.timestamp || 'N/A'}</td>
-                    <td><strong>${t.asset || 'UNKNOWN'}</strong></td>
-                    <td><span class="badge badge-${directionStr.toLowerCase()}">${directionStr}</span></td>
-                    <td>$${entryVal.toFixed(4)}</td>
-                    <td>$${exitVal ? exitVal.toFixed(4) : 'N/A'}</td>
-                    <td><span class="badge badge-${isWin ? 'win' : 'loss'}">${statusStr}</span></td>
-                    <td>${probVal.toFixed(2)}%</td>
-                    <td><span class="${pnlVal >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}</span></td>
-                `;
-                body.appendChild(tr);
+        function triggerRetrain() {
+            if (!confirm("Are you sure you want to trigger background retraining for all assets?")) return;
+            fetch('/api/retrain', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message || "Retraining triggered.");
             });
+        }
+
+        function exportReport() {
+            window.open('/api/export', '_blank');
+        }
+
+        function emergencyStop() {
+            if (!confirm("🚨 EMERGENCY STOP: Halt all new trades immediately?")) return;
+            setTradeMode('OFF');
         }
 
         function renderPnlChart(trades) {
@@ -978,11 +1123,11 @@
                     datasets: [{
                         label: 'Net Balance ($)',
                         data: data,
-                        borderColor: '#10b981',
-                        borderWidth: 2,
-                        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                        borderColor: '#00c3ff',
+                        borderWidth: 2.5,
+                        backgroundColor: 'rgba(0, 195, 255, 0.05)',
                         fill: true,
-                        tension: 0.2,
+                        tension: 0.15,
                         pointRadius: 0
                     }]
                 },
@@ -993,265 +1138,11 @@
                         legend: { display: false }
                     },
                     scales: {
-                        x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { color: '#9ca3af', font: { size: 10 } } },
-                        y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af' } }
+                        x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { color: '#8e95a5', font: { size: 10 } } },
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#8e95a5' } }
                     }
                 }
             });
-        }
-
-        function renderAssetChart(breakdown) {
-            const assets = Object.keys(breakdown || {}).sort();
-            
-            // 🟢 V8.5 Win Rate chart labels including sample sizes (N=...)
-            const labels = assets.map(a => `${a} (N=${breakdown[a].trades})`);
-            const winRates = assets.map(a => breakdown[a].win_rate);
-            
-            if (assetChart) {
-                assetChart.data.labels = labels;
-                assetChart.data.datasets[0].data = winRates;
-                assetChart.update();
-                return;
-            }
-
-            const ctx = document.getElementById('assetChart').getContext('2d');
-            assetChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: winRates,
-                        backgroundColor: 'rgba(59, 130, 246, 0.55)',
-                        borderColor: '#3b82f6',
-                        borderWidth: 1,
-                        borderRadius: 6
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { min: 0, max: 100, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af', callback: v => v + '%' } },
-                        y: { grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 10 } } }
-                    }
-                }
-            });
-        }
-
-        async function renderCalibrationChart() {
-            try {
-                const res = await fetch('/api/calibration');
-                const meta = await res.json();
-                if (!meta || Object.keys(meta).length === 0) return;
-                
-                // Show representative BTC/USDT calibration curve
-                const assetName = "BTC/USDT";
-                const assetMeta = meta[assetName];
-                if (!assetMeta || !assetMeta.long_reliability) return;
-                
-                const longRel = assetMeta.long_reliability;
-                const labels = longRel.map(pt => `${(pt.bin_midpoint * 100).toFixed(0)}%`);
-                const predWinRates = longRel.map(pt => pt.pred_win_rate);
-                const trueWinRates = longRel.map(pt => pt.true_frequency * 100);
-                
-                // Compute calibration alert (gap)
-                let maxGap = 0;
-                longRel.forEach(pt => {
-                    const gap = Math.abs(pt.pred_win_rate - pt.true_frequency * 100);
-                    if (gap > maxGap) maxGap = gap;
-                });
-                
-                const alertBadge = document.getElementById('calibration-alert-badge');
-                if (maxGap > 10.0) {
-                    alertBadge.className = "badge badge-loss";
-                    alertBadge.innerText = `Overconfident (Gap: ${maxGap.toFixed(1)}%)`;
-                } else {
-                    alertBadge.className = "badge badge-win";
-                    alertBadge.innerText = `Well Calibrated (Gap: ${maxGap.toFixed(1)}%)`;
-                }
-                
-                // Set training timestamp
-                if (assetMeta.last_trained) {
-                    document.getElementById('retrain-last').innerText = assetMeta.last_trained;
-                    const trainDate = new Date(assetMeta.last_trained);
-                    const diffTime = Math.abs(new Date() - trainDate);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    document.getElementById('retrain-days').innerText = `${diffDays} days ago`;
-                }
-
-                if (calibrationChart) {
-                    calibrationChart.data.labels = labels;
-                    calibrationChart.data.datasets[0].data = predWinRates;
-                    calibrationChart.data.datasets[1].data = trueWinRates;
-                    calibrationChart.update();
-                    return;
-                }
-                
-                const ctx = document.getElementById('calibrationChart').getContext('2d');
-                calibrationChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: 'Predicted Probability',
-                                data: predWinRates,
-                                borderColor: '#3b82f6',
-                                borderWidth: 2,
-                                borderDash: [5, 5],
-                                fill: false,
-                                tension: 0.1
-                            },
-                            {
-                                label: 'Actual Win Rate',
-                                data: trueWinRates,
-                                borderColor: '#10b981',
-                                borderWidth: 2,
-                                backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                                fill: true,
-                                tension: 0.2
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { color: '#9ca3af' } },
-                            y: { min: 40, max: 100, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af', callback: v => v + '%' } }
-                        }
-                    }
-                });
-            } catch (e) {
-                console.error("Calibration load failed: ", e);
-            }
-        }
-
-        function renderBrierChart(rollingBrier) {
-            if (!rollingBrier || rollingBrier.length === 0) return;
-            const labels = rollingBrier.map(pt => `Trade ${pt.trade_index}`);
-            const brierVals = rollingBrier.map(pt => pt.brier);
-            
-            if (brierChart) {
-                brierChart.data.labels = labels;
-                brierChart.data.datasets[0].data = brierVals;
-                brierChart.update();
-                return;
-            }
-            
-            const ctx = document.getElementById('brierChart').getContext('2d');
-            brierChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Brier Score (Rolling)',
-                        data: brierVals,
-                        borderColor: '#f43f5e',
-                        borderWidth: 1.5,
-                        backgroundColor: 'rgba(244, 63, 94, 0.05)',
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { grid: { color: 'rgba(255, 255, 255, 0.02)' }, ticks: { display: false } },
-                        y: { min: 0, max: 0.4, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af' } }
-                    }
-                }
-            });
-        }
-
-        function renderWeeklyPerfChart(weeklyPerf) {
-            const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-            const winRates = days.map(d => weeklyPerf[d] ? weeklyPerf[d].win_rate : 0.0);
-            
-            if (weeklyPerfChart) {
-                weeklyPerfChart.data.datasets[0].data = winRates;
-                weeklyPerfChart.update();
-                return;
-            }
-            
-            const ctx = document.getElementById('weeklyPerfChart').getContext('2d');
-            weeklyPerfChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: days.map(d => d.substring(0, 3)),
-                    datasets: [{
-                        data: winRates,
-                        backgroundColor: 'rgba(16, 185, 129, 0.65)',
-                        borderColor: '#10b981',
-                        borderWidth: 1,
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                        y: { min: 0, max: 100, grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#9ca3af', callback: v => v + '%' } }
-                    }
-                }
-            });
-        }
-
-        function updateAnalyticsPanel(stats) {
-            document.getElementById('anal-sharpe').innerText = stats.sharpe.toFixed(2);
-            document.getElementById('anal-sortino').innerText = stats.sortino.toFixed(2);
-            document.getElementById('anal-max-dd').innerText = `${stats.max_drawdown_pct.toFixed(2)}%`;
-            document.getElementById('anal-max-dd-cash').innerText = `-$${stats.max_drawdown_dollars.toFixed(2)}`;
-            document.getElementById('anal-curr-dd').innerText = `${stats.current_drawdown_pct.toFixed(2)}%`;
-            
-            document.getElementById('total-fees-paid').innerText = `$${stats.total_fees.toFixed(2)}`;
-            document.getElementById('gross-pnl-val').innerText = `$${stats.total_pnl.toFixed(2)}`;
-            document.getElementById('gross-pnl-val').className = stats.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-            
-            // Signal Type Performance table
-            const signalBody = document.getElementById('signal-perf-body');
-            signalBody.innerHTML = '';
-            const sp = stats.signal_performance || {};
-            Object.keys(sp).forEach(st => {
-                const row = sp[st];
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>${st}</strong></td>
-                    <td>${row.trades}</td>
-                    <td>${row.win_rate.toFixed(2)}%</td>
-                    <td><span class="${row.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${row.pnl.toFixed(2)}</span></td>
-                `;
-                signalBody.appendChild(tr);
-            });
-        }
-
-        function updateSignalFunnel(funnel) {
-            if (!funnel) return;
-            const gen = funnel.generated || 1;
-            const reg = funnel.rejected_regime || 0;
-            const thresh = funnel.rejected_threshold || 0;
-            const exec = funnel.executed || 0;
-            
-            document.getElementById('funnel-gen').innerText = gen;
-            document.getElementById('funnel-reg').innerText = reg;
-            document.getElementById('funnel-thresh').innerText = thresh;
-            document.getElementById('funnel-exec').innerText = exec;
-            
-            const regPct = gen > 0 ? (reg / gen) * 100 : 0;
-            const threshPct = gen > 0 ? (thresh / gen) * 100 : 0;
-            const execPct = gen > 0 ? (exec / gen) * 100 : 0;
-            
-            document.getElementById('funnel-gen-bar').style.width = '100%';
-            document.getElementById('funnel-reg-bar').style.width = `${regPct}%`;
-            document.getElementById('funnel-thresh-bar').style.width = `${threshPct}%`;
-            document.getElementById('funnel-exec-bar').style.width = `${execPct}%`;
         }
 
         // Fetch on boot, and refresh every 10 seconds
