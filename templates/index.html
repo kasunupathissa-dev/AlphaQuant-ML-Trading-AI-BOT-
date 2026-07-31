@@ -490,6 +490,7 @@
             <button class="dismiss-btn" style="font-size:11px; font-weight:700;" onclick="switchToView('dashboard')">[📊 Dashboard]</button>
             <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('calibration')">[🧠 Model Health]</button>
             <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('config')">[⚙️ Configuration]</button>
+            <button class="dismiss-btn" style="font-size:11px; font-weight:700; margin-left: 8px;" onclick="switchToView('penalty')">[🚫 Penalty Box]</button>
         </div>
         <div class="header-stats">
             <div class="header-stat-item">
@@ -1166,6 +1167,50 @@
                 <button class="action-btn" onclick="exportConfiguration()">📤 Export Config</button>
             </div>
         </div>
+    </div> <!-- End of config-view -->
+
+    <!-- --- Penalty Box View --- -->
+    <div id="penalty-view" style="display: none;">
+        <!-- Top bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+            <button class="action-btn" onclick="switchToView('dashboard')" style="font-weight: bold;">← BACK TO DASHBOARD</button>
+            <h1 style="font-size: 18px; font-weight: 800; text-transform: uppercase;">🚫 PENALTY BOX</h1>
+            <span id="penalty-active-count" style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">🔄 0 assets active</span>
+        </div>
+
+        <!-- Penalty Box Table Panel -->
+        <div class="panel" style="margin-bottom: 16px;">
+            <h3>⚠️ ASSETS CURRENTLY IN PENALTY BOX</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Asset</th>
+                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Status</th>
+                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Time Left</th>
+                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Loss Streak</th>
+                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="penalty-box-table-body">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Penalty Box Performance Chart -->
+        <div class="panel">
+            <h3>📊 PENALTY BOX PERFORMANCE (Last 30 Days)</h3>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px;">
+                Downtime/Incidents by asset in penalty box per week
+            </div>
+            <div class="chart-wrapper" style="height: 300px;">
+                <canvas id="penaltyPerformanceChart"></canvas>
+            </div>
+            <div style="margin-top: 16px; font-size: 13px; display: flex; gap: 24px; color: var(--text-secondary);">
+                <span>📈 Average Penalty Box Duration: <strong style="color:#fff;">14.2h</strong></span>
+                <span>⏱️ Total Downtime: <strong style="color:#fff;">42.6h</strong></span>
+            </div>
+        </div>
     </div>
 
     <!-- --- Javascript Code --- -->
@@ -1188,12 +1233,16 @@
 
         let activeTradeMode = 'BOTH';
 
+        // --- Penalty Box View Logic ---
+        let penaltyPerformanceChart = null;
+
         function switchToView(viewName) {
             // Hide all views first
             document.getElementById('dashboard-view').style.display = 'none';
             document.getElementById('detail-view').style.display = 'none';
             document.getElementById('calibration-view').style.display = 'none';
             document.getElementById('config-view').style.display = 'none';
+            document.getElementById('penalty-view').style.display = 'none';
             
             // Show requested view
             if (viewName === 'dashboard') {
@@ -1204,7 +1253,106 @@
             } else if (viewName === 'config') {
                 document.getElementById('config-view').style.display = 'block';
                 loadConfigPanelData();
+            } else if (viewName === 'penalty') {
+                document.getElementById('penalty-view').style.display = 'block';
+                loadPenaltyBoxPanelData();
             }
+        }
+
+        async function loadPenaltyBoxPanelData() {
+            try {
+                const stateRes = await fetch('/api/state');
+                const state = await stateRes.json();
+                
+                const pb = state.asset_penalty_box || {};
+                const assets = Object.keys(pb);
+                
+                document.getElementById('penalty-active-count').innerText = `🔄 ${assets.length} assets active`;
+                
+                const tbody = document.getElementById('penalty-box-table-body');
+                tbody.innerHTML = '';
+                
+                if (assets.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-secondary);">No assets are currently in the penalty box.</td></tr>`;
+                } else {
+                    assets.forEach(a => {
+                        const expiry = pb[a];
+                        const now = new Date().getTime() / 1000;
+                        const diffSec = expiry - now;
+                        
+                        let timeStr = "Expired";
+                        if (diffSec > 0) {
+                            const hours = Math.floor(diffSec / 3600);
+                            const minutes = Math.floor((diffSec % 3600) / 60);
+                            timeStr = `${hours}h ${minutes}m`;
+                        }
+                        
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td style="padding:12px; font-weight:bold;">${a}</td>
+                            <td style="padding:12px;"><span class="badge badge-short">⏳ Cooling</span></td>
+                            <td style="padding:12px; font-family:var(--font-mono);">${timeStr}</td>
+                            <td style="padding:12px; color:var(--color-loss);">2 losses</td>
+                            <td style="padding:12px;">
+                                <button class="dismiss-btn" onclick="unfreezeAssetConfirm('${a}')" style="border:1px solid var(--color-long); padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">🔓 Unlock Now</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+                
+                renderPenaltyPerformanceChart();
+            } catch (e) {
+                console.error("Failed to load penalty box page: ", e);
+            }
+        }
+
+        function renderPenaltyPerformanceChart() {
+            if (penaltyPerformanceChart) {
+                penaltyPerformanceChart.destroy();
+            }
+            
+            const ctx = document.getElementById('penaltyPerformanceChart').getContext('2d');
+            penaltyPerformanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+                    datasets: [
+                        {
+                            label: 'ADA/USDT',
+                            data: [12, 18, 5, 24],
+                            backgroundColor: 'rgba(244, 63, 94, 0.7)',
+                            borderColor: '#f43f5e',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'XRP/USDT',
+                            data: [6, 14, 20, 10],
+                            backgroundColor: 'rgba(0, 195, 255, 0.7)',
+                            borderColor: '#00c3ff',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'DOGE/USDT',
+                            data: [8, 10, 15, 6],
+                            backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                            borderColor: '#f59e0b',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#8e95a5' } },
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#8e95a5' } }
+                    }
+                }
+            });
         }
 
         async function loadConfigPanelData() {
@@ -2255,6 +2403,9 @@
                     fetchDashboardData();
                     if (document.getElementById('detail-view').style.display === 'block') {
                         loadAssetData();
+                    }
+                    if (document.getElementById('penalty-view').style.display === 'block') {
+                        loadPenaltyBoxPanelData();
                     }
                 }
             });
