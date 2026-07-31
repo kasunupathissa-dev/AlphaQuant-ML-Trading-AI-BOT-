@@ -129,8 +129,15 @@ def save_state():
         json.dump(state, f, indent=4, cls=NumpyEncoder)
     print("[INFO] Bot state saved.")
 
+last_state_load_time = 0
+
 def load_state():
-    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode
+    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time
+    current_time = time.time()
+    if current_time - last_state_load_time < 10:
+        return
+    last_state_load_time = current_time
+    
     if os.path.exists(config.STATE_FILE):
         try:
             with open(config.STATE_FILE, 'r') as f: state = json.load(f)
