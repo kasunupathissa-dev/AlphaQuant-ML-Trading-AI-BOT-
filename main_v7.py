@@ -34,6 +34,7 @@ telemetry_timer = time.time()
 asset_recent_results = {asset: [] for asset in config.TARGET_ASSETS} 
 asset_penalty_box = {} 
 signal_funnel = {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0}
+trade_mode = "BOTH"
 
 def get_local_time():
     """Returns the current datetime in the Stockholm timezone (or fallback UTC+2)."""
@@ -65,7 +66,8 @@ def save_state():
         "asset_recent_results": asset_recent_results,
         "active_trades": active_trades,
         "signal_funnel": signal_funnel,
-        "live_prices": live_prices
+        "live_prices": live_prices,
+        "trade_mode": trade_mode
     }
     with open(config.STATE_FILE, 'w') as f:
         # Use the custom NumpyEncoder to prevent type errors
@@ -73,7 +75,7 @@ def save_state():
     print("[INFO] Bot state saved.")
 
 def load_state():
-    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel
+    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode
     if os.path.exists(config.STATE_FILE):
         try:
             with open(config.STATE_FILE, 'r') as f: state = json.load(f)
@@ -81,6 +83,7 @@ def load_state():
             asset_recent_results = state.get("asset_recent_results", {asset: [] for asset in config.TARGET_ASSETS})
             active_trades = state.get("active_trades", [])
             signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
+            trade_mode = state.get("trade_mode", "BOTH")
             print("[SUCCESS] Bot state loaded from file.")
         except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
     else: print("[INFO] No state file found. Starting fresh.")
@@ -196,6 +199,7 @@ class AlphaQuantV8_2:
 
     async def manage_active_trades(self, symbol, current_price):
         global active_trades
+        load_state()
         trade_closed = False
         updated_trades = [t for t in active_trades if t['asset'] != symbol]
 
@@ -248,6 +252,7 @@ class AlphaQuantV8_2:
                 await asyncio.sleep(getattr(config, 'INFERENCE_INTERVAL_SECONDS', 3600)) 
                 if not self.running: break
                 
+                load_state()
                 send_telegram_message(f"🧠 *[V8.2] Starting Shotgun Inference Cycle on {len(brains)} assets...*")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Executing V8.2 Shotgun Pipeline...")
 
@@ -311,6 +316,17 @@ class AlphaQuantV8_2:
 
                         direction = "LONG" if prediction == 1 else "SHORT"
                         win_prob = probabilities[prediction] * 100
+                        
+                        # 🟢 V8.5 Switch: Enforce Trade Mode direction settings
+                        if trade_mode == "OFF":
+                            print(f"[MODE REJECT] {asset} signal aborted. Trade Mode is OFF globally.")
+                            continue
+                        elif trade_mode == "LONG_ONLY" and direction != "LONG":
+                            print(f"[MODE REJECT] {asset} {direction} signal aborted. Trade Mode is LONG_ONLY.")
+                            continue
+                        elif trade_mode == "SHORT_ONLY" and direction != "SHORT":
+                            print(f"[MODE REJECT] {asset} {direction} signal aborted. Trade Mode is SHORT_ONLY.")
+                            continue
                         
                         # 🟢 V8.5 Upgrade: Support direction-specific thresholds (LONG vs SHORT)
                         if direction == "LONG":

@@ -400,6 +400,57 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"404 Not Found")
 
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path == '/api/config':
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                req_data = json.loads(post_data.decode('utf-8'))
+                
+                # Load existing state
+                state_data = {}
+                if os.path.exists(STATE_FILE):
+                    with open(STATE_FILE, 'r') as f:
+                        state_data = json.load(f)
+                
+                updated = False
+                
+                # 1. Update trade mode if passed
+                if "trade_mode" in req_data:
+                    mode = req_data["trade_mode"].upper()
+                    if mode in ["BOTH", "LONG_ONLY", "SHORT_ONLY", "OFF"]:
+                        state_data["trade_mode"] = mode
+                        updated = True
+                
+                # 2. Release asset from penalty box if passed
+                if "unfreeze_asset" in req_data:
+                    asset = req_data["unfreeze_asset"]
+                    pb = state_data.get("asset_penalty_box", {})
+                    if asset in pb:
+                        del pb[asset]
+                        state_data["asset_penalty_box"] = pb
+                        updated = True
+                        
+                if updated:
+                    with open(STATE_FILE, 'w') as f:
+                        json.dump(state_data, f, indent=4)
+                    print(f"[API] Updated config in state file: {req_data}")
+                    
+                self.send_json({"status": "success", "state": state_data})
+            except Exception as e:
+                self.send_json({"status": "error", "message": str(e)}, 400)
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"404 Not Found")
+
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     pass
 

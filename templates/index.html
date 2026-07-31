@@ -389,6 +389,7 @@
             <button class="tab-btn" onclick="switchTab('asset-performance-tab')">Asset Breakdown</button>
             <button class="tab-btn" onclick="switchTab('penalty-box-tab')">Penalty Box</button>
             <button class="tab-btn" onclick="switchTab('trade-history-tab')">Recent Trade Log</button>
+            <button class="tab-btn" onclick="switchTab('config-tab')">Configuration</button>
         </div>
 
         <!-- Tab: Active Trades -->
@@ -615,6 +616,21 @@
                 </table>
             </div>
         </div>
+
+        <!-- Tab: Configuration -->
+        <div id="config-tab" class="tab-content">
+            <div class="card" style="padding: 25px; background: #181922; border: 1px solid #232530; border-radius: 8px;">
+                <h3 style="margin-bottom: 8px; color: #00c3ff;">Trading Mode Configuration</h3>
+                <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Configure which trade directions the machine learning models are permitted to execute globally.</p>
+                <div class="config-controls" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <button id="mode-btn-both" class="btn active" onclick="setTradeMode('BOTH')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #00c3ff; background: rgba(0,195,255,0.1); color: #00c3ff; transition: all 0.3s ease;">BOTH (Long & Short)</button>
+                    <button id="mode-btn-long" class="btn" onclick="setTradeMode('LONG_ONLY')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #3b3d4a; background: #1c1d24; color: #aaa; transition: all 0.3s ease;">LONG ONLY</button>
+                    <button id="mode-btn-short" class="btn" onclick="setTradeMode('SHORT_ONLY')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #3b3d4a; background: #1c1d24; color: #aaa; transition: all 0.3s ease;">SHORT ONLY</button>
+                    <button id="mode-btn-off" class="btn" onclick="setTradeMode('OFF')" style="padding: 12px 24px; font-weight: 700; cursor: pointer; border-radius: 6px; border: 1px solid #ff4a4a; background: rgba(255,74,74,0.05); color: #ff4a4a; transition: all 0.3s ease;">OFF (Stop Trading)</button>
+                </div>
+                <p id="trade-mode-status" style="font-size: 13px; color: #666; font-style: italic;">Current Mode: BOTH</p>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -641,6 +657,7 @@
                 updateActiveTrades(state.active_trades, state.live_prices);
                 updatePenaltyBox(state.asset_penalty_box);
                 updateSignalFunnel(state.signal_funnel);
+                updateTradeModeUI(state.trade_mode || 'BOTH');
 
                 // 2. Fetch Stats
                 const statsRes = await fetch('/api/stats');
@@ -772,15 +789,96 @@
                 const expiry = new Date(penaltyBox[a] * 1000).toLocaleString('sv-SE');
                 const card = document.createElement('div');
                 card.className = 'penalty-card';
+                card.style.display = 'flex';
+                card.style.justifyContent = 'space-between';
+                card.style.alignItems = 'center';
+                card.style.padding = '15px';
                 card.innerHTML = `
-                    <div>
-                        <h4>${a}</h4>
-                        <p>Performance Block Active</p>
+                    <div style="flex-grow: 1;">
+                        <h4 style="margin: 0 0 4px 0; color: #fff;">${a}</h4>
+                        <p style="margin: 0 0 8px 0; color: #888; font-size: 11px;">Performance Block Active</p>
+                        <span class="badge badge-loss" style="font-size:10px;">Expires: ${expiry}</span>
                     </div>
-                    <span class="badge badge-loss" style="font-size:10px;">Expires: ${expiry}</span>
+                    <button onclick="unfreezeAsset('${a}')" style="background: rgba(0, 195, 255, 0.1); border: 1px solid #00c3ff; color: #00c3ff; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; transition: all 0.3s; margin-left: 10px;">Release</button>
                 `;
                 body.appendChild(card);
             });
+        }
+
+        function setTradeMode(mode) {
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ trade_mode: mode })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    updateTradeModeUI(mode);
+                } else {
+                    alert('Failed to update trade mode: ' + data.message);
+                }
+            })
+            .catch(err => console.error('Error updating trade mode:', err));
+        }
+
+        function unfreezeAsset(asset) {
+            if (!confirm(`Are you sure you want to release ${asset} from the penalty box?`)) return;
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ unfreeze_asset: asset })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    fetchDashboardData();
+                } else {
+                    alert('Failed to release asset: ' + data.message);
+                }
+            })
+            .catch(err => console.error('Error unfreezing asset:', err));
+        }
+
+        function updateTradeModeUI(mode) {
+            const modes = ['BOTH', 'LONG_ONLY', 'SHORT_ONLY', 'OFF'];
+            const buttonIds = {
+                'BOTH': 'mode-btn-both',
+                'LONG_ONLY': 'mode-btn-long',
+                'SHORT_ONLY': 'mode-btn-short',
+                'OFF': 'mode-btn-off'
+            };
+            
+            modes.forEach(m => {
+                const btn = document.getElementById(buttonIds[m]);
+                if (btn) {
+                    btn.style.background = '#1c1d24';
+                    btn.style.color = '#aaa';
+                    btn.style.borderColor = '#3b3d4a';
+                }
+            });
+            
+            const activeBtn = document.getElementById(buttonIds[mode]);
+            if (activeBtn) {
+                if (mode === 'OFF') {
+                    activeBtn.style.background = 'rgba(255,74,74,0.1)';
+                    activeBtn.style.color = '#ff4a4a';
+                    activeBtn.style.borderColor = '#ff4a4a';
+                } else {
+                    activeBtn.style.background = 'rgba(0,195,255,0.1)';
+                    activeBtn.style.color = '#00c3ff';
+                    activeBtn.style.borderColor = '#00c3ff';
+                }
+            }
+            
+            const statusEl = document.getElementById('trade-mode-status');
+            if (statusEl) {
+                statusEl.innerText = `Current Mode: ${mode}`;
+            }
         }
 
         function updateStatCards(stats) {
