@@ -2381,17 +2381,42 @@
             exposureEl.innerText = `$${totalExposure.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
+        let assetToClose = null;
+
         function closePosition(asset) {
-            if (!confirm(`Are you sure you want to close position for ${asset}?`)) return;
-            fetch('/api/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ close_trade: asset })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') fetchDashboardData();
-            });
+            assetToClose = asset;
+            document.getElementById('force-close-msg').innerText = `Are you sure you want to manually close the position for ${asset} and realize its current P&L?`;
+            document.getElementById('force-close-penalty-check').checked = true;
+            document.getElementById('force-close-modal').style.display = 'flex';
+        }
+
+        function closeForceCloseModal() {
+            document.getElementById('force-close-modal').style.display = 'none';
+            assetToClose = null;
+        }
+
+        async function confirmForceClose() {
+            if (!assetToClose) return;
+            const sendToPenalty = document.getElementById('force-close-penalty-check').checked;
+            
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        close_trade: assetToClose,
+                        send_to_penalty: sendToPenalty
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    fetchDashboardData();
+                }
+            } catch (e) {
+                alert("Failed to force close position.");
+            } finally {
+                closeForceCloseModal();
+            }
         }
 
         function updateAssetBreakdown(breakdown) {
@@ -2678,5 +2703,27 @@
         fetchDashboardData();
         setInterval(fetchDashboardData, 10000);
     </script>
+
+    <!-- --- Force Close Modal --- -->
+    <div id="force-close-modal" style="display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+        <div class="panel" style="width: 400px; max-width: 90%; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);">
+            <h3 style="color: var(--color-loss); margin-top: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                ⚠️ FORCE CLOSE POSITION
+            </h3>
+            <p id="force-close-msg" style="font-size: 13px; color: #fff; margin-bottom: 16px; line-height: 1.4;">
+                Are you sure you want to manually close this position and realize its current P&L?
+            </p>
+            <div style="margin-bottom: 24px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="force-close-penalty-check" checked style="cursor: pointer;">
+                    Isolate asset in Penalty Box for 24 hours
+                </label>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button class="action-btn" onclick="closeForceCloseModal()" style="background: transparent; border-color: var(--border-color); color: var(--text-secondary); width: auto; min-width: 80px;">Cancel</button>
+                <button class="action-btn" onclick="confirmForceClose()" style="background-color: var(--color-loss); border-color: var(--color-loss); color: #fff; font-weight: bold; width: auto; min-width: 120px;">Confirm Close</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

@@ -479,12 +479,61 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 # 3. Force close a specific position if passed
                 if "close_trade" in req_data:
                     asset = req_data["close_trade"]
+                    send_to_penalty = req_data.get("send_to_penalty", False)
                     trades = state_data.get("active_trades", [])
+                    
+                    target_trade = next((t for t in trades if t["asset"] == asset), None)
+                    if target_trade:
+                        # Calculate realized P&L based on last known price
+                        live_prices = state_data.get("live_prices", {})
+                        current_price = live_prices.get(asset, target_trade.get("entry", 0.0))
+                        
+                        entry = target_trade.get("entry", 0.0)
+                        pos_size = target_trade.get("position_size", 100.0)
+                        locked_pnl = target_trade.get("locked_pnl", 0.0)
+                        
+                        if target_trade.get("direction", "LONG").upper() == "LONG":
+                            remaining_pnl = pos_size * ((current_price - entry) / entry) if entry > 0 else 0.0
+                        else:
+                            remaining_pnl = pos_size * ((entry - current_price) / entry) if entry > 0 else 0.0
+                            
+                        realized_pnl = locked_pnl + remaining_pnl
+                        
+                        # Log to CSV file
+                        try:
+                            file_exists = os.path.isfile(LOG_FILE)
+                            with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
+                                writer = csv.writer(f)
+                                if not file_exists:
+                                    writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
+                                
+                                result = "PROFIT" if realized_pnl >= 0 else "LOSS"
+                                ai_prob_str = f"{target_trade.get('ai_prob', 50.0):.2f}%"
+                                timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                writer.writerow([
+                                    timestamp_str,
+                                    target_trade["asset"],
+                                    target_trade["direction"],
+                                    f"{target_trade['entry']:.4f}",
+                                    f"{target_trade['tp']:.4f}",
+                                    f"{target_trade['sl']:.4f}",
+                                    result,
+                                    ai_prob_str,
+                                    f"{realized_pnl:.2f}",
+                                    target_trade.get("signal_type", "SHOTGUN")
+                                ])
+                            print(f"[API] Manual close log written for {asset}. Realized P&L: ${realized_pnl:.2f}")
+                        except Exception as csv_err:
+                            print(f"[ERROR] Failed to log manually closed trade to CSV: {csv_err}")
+                    
                     state_data["active_trades"] = [t for t in trades if t["asset"] != asset]
-                    # Also freeze the asset in the penalty box for 24h to prevent immediate re-entry
-                    pb = state_data.get("asset_penalty_box", {})
-                    pb[asset] = datetime.now().timestamp() + (24 * 3600)
-                    state_data["asset_penalty_box"] = pb
+                    
+                    # Also freeze the asset in the penalty box for 24h if explicitly requested
+                    if send_to_penalty:
+                        pb = state_data.get("asset_penalty_box", {})
+                        pb[asset] = datetime.now().timestamp() + (24 * 3600)
+                        state_data["asset_penalty_box"] = pb
+                        
                     updated = True
                     
                 # 4. Update configuration settings settings block if passed
