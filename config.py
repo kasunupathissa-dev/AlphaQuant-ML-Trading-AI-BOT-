@@ -6,8 +6,8 @@ STATE_FILE = "live_engine_state.json"
 LIVE_TRADING_ENABLED = False
 
 # --- Binance Futures Testnet (Demo Trading) Settings ---
-BINANCE_API_KEY = ""
-BINANCE_API_SECRET = ""
+BINANCE_API_KEY = "X0djHJJWnlj5ynaZvVKdiq0krjTVr9i5m42f0YS9WJaMr7tIZfKTahj1pAStliSc"
+BINANCE_API_SECRET = "pG1xQQLlZDWiImnMJnWCKX9MdvtYL1kiS1IG5d2HHqDbsPDSkGKMBVqEvD1MoMjF"
 USE_TESTNET = True
 
 # --- Timeframe Settings ---
@@ -36,6 +36,7 @@ TARGET_ASSETS = [
 # 🟢 V8.5 Upgrade: System timezone synchronization & estimated transaction fee percentage
 TIMEZONE = "Europe/Stockholm"
 ESTIMATED_FEE_PCT = 0.0008
+RISK_PER_TRADE_USD = 5.0
 
 # 🟢 V8.5 Upgrade: Direction-specific confidence thresholds
 LONG_CONFIDENCE_THRESHOLD = 65.0

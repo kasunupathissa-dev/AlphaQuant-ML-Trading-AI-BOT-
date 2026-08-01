@@ -780,9 +780,10 @@ class AlphaQuantV8_2:
                             vol_factor = 0.015 / max(atr_pct_val, 0.001)
                             volatility_factor = np.clip(vol_factor, 0.5, 1.5)
                             
-                            target_risk = 10.0 * confidence_factor * volatility_factor
-                            # Cap absolute risk per trade at $20.0 to prevent over-exposure
-                            target_risk = min(target_risk, 20.0)
+                            base_risk = getattr(config, 'RISK_PER_TRADE_USD', 10.0)
+                            target_risk = base_risk * confidence_factor * volatility_factor
+                            # Cap absolute risk per trade at 2.0x base_risk to prevent over-exposure
+                            target_risk = min(target_risk, base_risk * 2.0)
                             
                             position_size = (target_risk / abs(entry_price - sl)) * entry_price
                             
