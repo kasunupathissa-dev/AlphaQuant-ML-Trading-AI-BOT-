@@ -272,11 +272,26 @@ def log_trade_features_to_csv(trade):
             writer.writerow(headers)
         writer.writerow(row)
 
-async def execute_testnet_order(exchange, symbol, direction, amount):
+async def execute_testnet_order(exchange, symbol, direction, amount, close_full=False):
     if not getattr(config, 'USE_TESTNET', False) or not getattr(config, 'BINANCE_API_KEY', ''):
         return None
     try:
         side = 'buy' if direction == 'LONG' else 'sell'
+        
+        # Synchronize exact contract size from exchange for full exits (TP/SL/manual closes)
+        if close_full:
+            try:
+                positions = await asyncio.to_thread(exchange.fetch_positions, [symbol])
+                for p in positions:
+                    if p['symbol'].split(':')[0] == symbol:
+                        contracts = abs(p.get('contracts', 0.0))
+                        if contracts > 0.0:
+                            amount = contracts
+                            print(f"[TESTNET] Synced remaining contracts from exchange for full close: {amount:.6f}")
+                        break
+            except Exception as sync_err:
+                print(f"[WARNING] Failed to fetch actual contracts for {symbol}: {sync_err}. Falling back to default amount.")
+
         order = await asyncio.to_thread(
             exchange.create_market_order,
             symbol=symbol,
@@ -564,7 +579,8 @@ class AlphaQuantV8_2:
                         self.exchange_reg,
                         symbol=symbol,
                         direction=exit_direction,
-                        amount=trade['position_size'] / trade['entry']
+                        amount=trade['position_size'] / trade['entry'],
+                        close_full=True
                     )
                 except Exception as close_order_err:
                     print(f"[ERROR] Failed to execute Testnet close order for {symbol}: {close_order_err}")

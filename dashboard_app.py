@@ -545,6 +545,19 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                 side = 'buy' if exit_direction == 'LONG' else 'sell'
                                 amount = pos_size / entry if entry > 0 else 0.0
                                 
+                                # Synchronize actual remaining contracts from exchange for complete manual close
+                                try:
+                                    positions = exchange.fetch_positions([asset])
+                                    for p in positions:
+                                        if p['symbol'].split(':')[0] == asset:
+                                            contracts = abs(p.get('contracts', 0.0))
+                                            if contracts > 0.0:
+                                                amount = contracts
+                                                print(f"[API TESTNET] Synced remaining contracts from exchange for manual close: {amount:.6f}")
+                                            break
+                                except Exception as sync_err:
+                                    print(f"[WARNING] Failed to fetch actual contracts for {asset}: {sync_err}. Using default fallback amount.")
+                                
                                 if amount > 0:
                                     order = exchange.create_market_order(
                                         symbol=asset,
