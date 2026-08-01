@@ -2343,15 +2343,18 @@
             activeTrades.forEach(t => {
                 const currentPrice = (livePrices && livePrices[t.asset]) || t.entry;
                 
-                // Calculate P&L
+                // Calculate P&L locally as fallback
                 let unpnl = 0;
                 if (t.direction === "LONG") {
                     unpnl = t.position_size * ((currentPrice - t.entry) / t.entry);
                 } else {
                     unpnl = t.position_size * ((t.entry - currentPrice) / t.entry);
                 }
-                const totalPnl = unpnl + (t.locked_pnl || 0.0);
-                const pnlPct = (totalPnl / t.position_size) * 100.0;
+                
+                // Use live Binance P&L and leverage-adjusted ROI if available
+                const totalPnl = typeof t.binance_pnl === 'number' ? t.binance_pnl : (unpnl + (t.locked_pnl || 0.0));
+                const pnlPct = typeof t.binance_roi === 'number' ? t.binance_roi : ((totalPnl / t.position_size) * 100.0);
+                const leverageStr = typeof t.binance_leverage === 'number' ? ` <span style="font-size:10px; color:var(--text-secondary); font-weight:bold;">${t.binance_leverage}x</span>` : '';
                 
                 // Duration
                 let durationStr = "N/A";
@@ -2366,7 +2369,7 @@
                 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td><strong>${t.asset}</strong>${t.half_closed ? ' <span style="font-size:10px; color:#00c3ff; font-weight:bold;">(Runner)</span>' : ''}</td>
+                    <td><strong>${t.asset}</strong>${t.half_closed ? ' <span style="font-size:10px; color:#00c3ff; font-weight:bold;">(Runner)</span>' : ''}${leverageStr}</td>
                     <td><span class="badge badge-${t.direction.toLowerCase()}">${t.direction === 'LONG' ? 'LONG ▲' : 'SHORT ▼'}</span></td>
                     <td>$${t.entry.toFixed(4)}</td>
                     <td>$${currentPrice.toFixed(4)}</td>

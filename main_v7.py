@@ -361,8 +361,39 @@ class AlphaQuantV8_2:
         print("[SYSTEM] Starting REST Fallback Price Monitor...")
         while self.running:
             try:
-                await asyncio.sleep(30)  # Check every 30 seconds
+                await asyncio.sleep(15)  # Check every 15 seconds
                 if not self.running: break
+                
+                # Fetch live positions from Binance Demo/Testnet if active to sync P&L / ROI
+                binance_positions = {}
+                if getattr(config, 'USE_TESTNET', False) and getattr(config, 'BINANCE_API_KEY', ''):
+                    try:
+                        positions = await asyncio.to_thread(self.exchange_reg.fetch_positions)
+                        for p in positions:
+                            contracts = p.get('contracts', 0.0)
+                            unpnl = p.get('unrealizedPnl', 0.0)
+                            if (contracts is not None and contracts > 0.0) or (unpnl is not None and unpnl != 0.0):
+                                symbol = p['symbol'].split(':')[0] # Normalize BTC/USDT:USDT to BTC/USDT
+                                binance_positions[symbol] = p
+                    except Exception as pos_err:
+                        print(f"[WARNING] Failed to fetch live positions from Binance API: {pos_err}")
+
+                global active_trades
+                load_state()
+                state_updated = False
+                
+                # Update local active trades with live Binance data
+                for t in active_trades:
+                    symbol = t['asset']
+                    if symbol in binance_positions:
+                        pos = binance_positions[symbol]
+                        t['binance_pnl'] = pos.get('unrealizedPnl')
+                        t['binance_roi'] = pos.get('percentage')
+                        t['binance_leverage'] = pos.get('leverage')
+                        state_updated = True
+                
+                if state_updated:
+                    save_state()
                 
                 active_symbols = list(set([t['asset'] for t in active_trades]))
                 if not active_symbols:
