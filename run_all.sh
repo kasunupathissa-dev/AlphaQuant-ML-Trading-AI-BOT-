@@ -27,13 +27,13 @@ sleep 2
 
 # Step 3: Start Dashboard in background
 echo "[3/3] Launching Dashboard in background..."
-nohup python3 dashboard_app.py > dashboard.log 2>&1 &
+nohup python3 -u dashboard_app.py > dashboard.log 2>&1 &
 DASHBOARD_PID=$!
 echo "  - Dashboard running with PID: $DASHBOARD_PID (Logs: dashboard.log)"
 
 # Step 4: Start Trading Bot in background
 echo "Launching Live Trading Bot in background..."
-nohup python3 main_v7.py > bot.log 2>&1 &
+nohup python3 -u main_v7.py > bot.log 2>&1 &
 BOT_PID=$!
 echo "  - Trading Bot running with PID: $BOT_PID (Logs: bot.log)"
 
