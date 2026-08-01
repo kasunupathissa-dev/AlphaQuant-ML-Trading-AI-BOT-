@@ -523,7 +523,7 @@
         <div class="header-stats">
             <div class="header-stat-item">
                 <span class="header-stat-label">💰 BALANCE:</span>
-                <strong id="header-balance">$10,000.00</strong>
+                <strong id="header-balance">$100.00</strong>
             </div>
             <div class="header-stat-item">
                 <span class="header-stat-label">🎯 WIN RATE:</span>
@@ -2258,7 +2258,7 @@
         }
 
         function updateHeader(state, stats) {
-            const balance = 10000.0 + stats.net_pnl;
+            const balance = 100.0 + stats.net_pnl;
             document.getElementById('header-balance').innerText = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             document.getElementById('header-winrate').innerText = `${stats.win_rate.toFixed(2)}%`;
             document.getElementById('header-profit-factor').innerText = stats.profit_factor.toFixed(2);

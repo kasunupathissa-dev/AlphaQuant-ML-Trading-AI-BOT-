@@ -258,7 +258,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                         stats["sortino"] = round(mean_ret / std_downside, 4) if std_downside > 0 else 0.0
                         
                         # 🟢 Drawdown calculations
-                        initial_balance = 10000.0
+                        initial_balance = 100.0
                         current_equity = initial_balance
                         peak = initial_balance
                         max_dd_dollars = 0.0
