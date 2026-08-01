@@ -538,7 +538,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                         'defaultType': 'future'
                                     }
                                 })
-                                exchange.set_sandbox_mode(True)
+                                exchange.enable_demo_trading(True)
                                 
                                 exit_direction = 'SHORT' if target_trade.get('direction', 'LONG').upper() == 'LONG' else 'LONG'
                                 side = 'buy' if exit_direction == 'LONG' else 'sell'

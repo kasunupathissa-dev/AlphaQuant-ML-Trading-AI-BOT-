@@ -318,9 +318,9 @@ class AlphaQuantV8_2:
         self.exchange_reg = ccxt.binance(exchange_config)
         
         if getattr(config, 'USE_TESTNET', False):
-            self.exchange_pro.set_sandbox_mode(True)
-            self.exchange_reg.set_sandbox_mode(True)
-            print("[INFO] Connected to Binance Futures TESTNET Sandbox Mode.")
+            self.exchange_pro.enable_demo_trading(True)
+            self.exchange_reg.enable_demo_trading(True)
+            print("[INFO] Connected to Binance Futures Demo Trading Mode.")
         self.running = True
         self.tasks = []
         
