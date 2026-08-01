@@ -317,6 +317,14 @@ class AlphaQuantV8_2:
         self.exchange_pro = ccxtpro.binance(exchange_config)
         self.exchange_reg = ccxt.binance(exchange_config)
         
+        # Public production client for fetching market data analytics (funding rate, open interest, etc.)
+        self.public_exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': 'future'
+            }
+        })
+        
         if getattr(config, 'USE_TESTNET', False):
             self.exchange_pro.enable_demo_trading(True)
             self.exchange_reg.enable_demo_trading(True)
@@ -564,14 +572,14 @@ class AlphaQuantV8_2:
                     
                     try:
                         fetch_limit = 1600 if config.TIMEFRAME == "15m" else 250
-                        ohlcv = await self.exchange_pro.fetch_ohlcv(asset, config.TIMEFRAME, limit=fetch_limit)
+                        ohlcv = await asyncio.to_thread(self.public_exchange.fetch_ohlcv, asset, config.TIMEFRAME, limit=fetch_limit)
                         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                         
                         feature_df = calculate_features_for_shotgun(df)
                         
-                        funding_history = self.exchange_reg.fetch_funding_rate_history(asset, limit=100)
+                        funding_history = await asyncio.to_thread(self.public_exchange.fetch_funding_rate_history, asset, limit=100)
                         oi_tf = '15m' if config.TIMEFRAME == '15m' else '1h'
-                        oi_history = self.exchange_reg.fetch_open_interest_history(asset, oi_tf, limit=100)
+                        oi_history = await asyncio.to_thread(self.public_exchange.fetch_open_interest_history, asset, oi_tf, limit=100)
                         funding_df = pd.DataFrame(funding_history)[['timestamp', 'fundingRate']]
                         oi_df = pd.DataFrame(oi_history)[['timestamp', 'openInterestAmount']]
                         funding_df['timestamp'] = pd.to_datetime(funding_df['timestamp'], unit='ms')
