@@ -255,6 +255,24 @@ def log_trade_features_to_csv(trade):
             writer.writerow(headers)
         writer.writerow(row)
 
+async def execute_testnet_order(exchange, symbol, direction, amount):
+    if not getattr(config, 'USE_TESTNET', False) or not getattr(config, 'BINANCE_API_KEY', ''):
+        return None
+    try:
+        side = 'buy' if direction == 'LONG' else 'sell'
+        order = await asyncio.to_thread(
+            exchange.create_market_order,
+            symbol=symbol,
+            side=side,
+            amount=amount
+        )
+        order_id = order.get('id')
+        print(f"[TESTNET] Placed {side.upper()} order for {amount:.6f} {symbol}. Order ID: {order_id}")
+        return order_id
+    except Exception as e:
+        print(f"[ERROR] Failed to execute Testnet order for {symbol} ({direction}): {e}")
+        return None
+
 def log_trade_to_csv(trade):
     file_exists = os.path.isfile(config.LOG_FILE)
     with open(config.LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
@@ -288,8 +306,21 @@ class AlphaQuantV8_2:
         
         if not brains: exit("[FATAL] No valid V8 brains loaded. Please run the V8 pipeline.")
             
-        self.exchange_pro = ccxtpro.binance({'options': {'defaultType': 'future'}})
-        self.exchange_reg = ccxt.binance({'options': {'defaultType': 'future'}})
+        exchange_config = {
+            'apiKey': getattr(config, 'BINANCE_API_KEY', ''),
+            'secret': getattr(config, 'BINANCE_API_SECRET', ''),
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': 'future'
+            }
+        }
+        self.exchange_pro = ccxtpro.binance(exchange_config)
+        self.exchange_reg = ccxt.binance(exchange_config)
+        
+        if getattr(config, 'USE_TESTNET', False):
+            self.exchange_pro.set_sandbox_mode(True)
+            self.exchange_reg.set_sandbox_mode(True)
+            print("[INFO] Connected to Binance Futures TESTNET Sandbox Mode.")
         self.running = True
         self.tasks = []
         
@@ -372,6 +403,14 @@ class AlphaQuantV8_2:
                         trade['half_closed'] = True
                         trade_closed = True
                         
+                        # Execute Testnet order for partial TP (sell to reduce LONG)
+                        await execute_testnet_order(
+                            self.exchange_reg,
+                            symbol=symbol,
+                            direction='SHORT',
+                            amount=(notional / 2) / trade['entry']
+                        )
+                        
                         msg = (
                             f"🔔 *[V8.2] PARTIAL TP EXECUTED*\n"
                             f"• *Asset*: {symbol} | LONG\n"
@@ -389,6 +428,14 @@ class AlphaQuantV8_2:
                         trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
                         trade['half_closed'] = True
                         trade_closed = True
+                        
+                        # Execute Testnet order for partial TP (buy to reduce SHORT)
+                        await execute_testnet_order(
+                            self.exchange_reg,
+                            symbol=symbol,
+                            direction='LONG',
+                            amount=(notional / 2) / trade['entry']
+                        )
                         
                         msg = (
                             f"🔔 *[V8.2] PARTIAL TP EXECUTED*\n"
@@ -445,6 +492,16 @@ class AlphaQuantV8_2:
                 pnl = trade.get('locked_pnl', 0.0) + remaining_pnl
                 result = "PROFIT" if pnl >= 0 else "LOSS"
                 trade.update({'status': result, 'pnl': pnl})
+                
+                # Execute Testnet order on exit (opposite direction)
+                exit_direction = 'SHORT' if trade['direction'] == 'LONG' else 'LONG'
+                await execute_testnet_order(
+                    self.exchange_reg,
+                    symbol=symbol,
+                    direction=exit_direction,
+                    amount=trade['position_size'] / trade['entry']
+                )
+                
                 log_trade_to_csv(trade)
                 
                 asset_recent_results[symbol].append(1 if result == "PROFIT" else 0)
@@ -656,6 +713,14 @@ class AlphaQuantV8_2:
                             else:
                                 signal_type = "REVERSION"
                             
+                            # Place Testnet Entry Order if enabled
+                            order_id = await execute_testnet_order(
+                                self.exchange_reg,
+                                symbol=asset,
+                                direction=direction,
+                                amount=position_size / entry_price
+                            )
+                            
                             # 🟢 V8.5 active_trades metadata: Include entry_time (timestamp) and signal_type
                             active_trades.append({
                                 "asset": asset, "direction": direction, "entry": entry_price, "sl": sl, "tp": tp, 
@@ -667,6 +732,7 @@ class AlphaQuantV8_2:
                                 "lowest_price": entry_price,
                                 "trailing_active": False,
                                 "half_closed": False,
+                                "testnet_order_id": order_id,
                                 "entry_features": {
                                     "dist_ema_50": float(last_closed['dist_ema_50']),
                                     "dist_ema_200": float(last_closed['dist_ema_200']),

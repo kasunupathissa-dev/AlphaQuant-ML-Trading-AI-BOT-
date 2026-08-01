@@ -5,6 +5,11 @@ LOG_FILE = "trading_log_v8.csv"
 STATE_FILE = "live_engine_state.json"
 LIVE_TRADING_ENABLED = False
 
+# --- Binance Futures Testnet (Demo Trading) Settings ---
+BINANCE_API_KEY = ""
+BINANCE_API_SECRET = ""
+USE_TESTNET = True
+
 # --- Timeframe Settings ---
 TIMEFRAME = "15m"  # "15m" or "1h"
 INFERENCE_INTERVAL_SECONDS = 900  # 15 minutes (900s) for 15m, 3600s for 1h

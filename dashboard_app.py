@@ -5,6 +5,7 @@ import os
 import csv
 import sys
 from datetime import datetime
+import ccxt
 
 # 🟢 V8.5 Upgrade: Import config and zoneinfo for Stockholm timezone handling
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -525,6 +526,33 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                             print(f"[API] Manual close log written for {asset}. Realized P&L: ${realized_pnl:.2f}")
                         except Exception as csv_err:
                             print(f"[ERROR] Failed to log manually closed trade to CSV: {csv_err}")
+                            
+                        # Execute Testnet order on exit (opposite direction) if enabled
+                        if getattr(config, 'USE_TESTNET', False) and getattr(config, 'BINANCE_API_KEY', ''):
+                            try:
+                                exchange = ccxt.binance({
+                                    'apiKey': getattr(config, 'BINANCE_API_KEY', ''),
+                                    'secret': getattr(config, 'BINANCE_API_SECRET', ''),
+                                    'enableRateLimit': True,
+                                    'options': {
+                                        'defaultType': 'future'
+                                    }
+                                })
+                                exchange.set_sandbox_mode(True)
+                                
+                                exit_direction = 'SHORT' if target_trade.get('direction', 'LONG').upper() == 'LONG' else 'LONG'
+                                side = 'buy' if exit_direction == 'LONG' else 'sell'
+                                amount = pos_size / entry if entry > 0 else 0.0
+                                
+                                if amount > 0:
+                                    order = exchange.create_market_order(
+                                        symbol=asset,
+                                        side=side,
+                                        amount=amount
+                                    )
+                                    print(f"[API TESTNET] Force closed position for {asset} on Testnet. Order ID: {order.get('id')}")
+                            except Exception as testnet_err:
+                                print(f"[ERROR] Failed to place manual close order on Testnet for {asset}: {testnet_err}")
                     
                     state_data["active_trades"] = [t for t in trades if t["asset"] != asset]
                     
