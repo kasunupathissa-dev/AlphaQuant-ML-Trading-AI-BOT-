@@ -754,11 +754,8 @@ class AlphaQuantV8_2:
                             })
                             asset_locks[asset] = True
                             save_state()
-                        else:
-                            # 🟢 V8.5 Funnel: Increment threshold rejection counter
-                            signal_funnel["rejected_threshold"] += 1
-                            save_state()
                             
+                            # Send Telegram Notification for executed trade
                             rr_ratio = config.ATR_TAKE_PROFIT_MULTIPLIER / config.ATR_STOP_LOSS_MULTIPLIER
                             sl_pct = (abs(entry_price - sl) / entry_price) * 100.0
                             tp_pct = (abs(tp - entry_price) / entry_price) * 100.0
@@ -774,6 +771,10 @@ class AlphaQuantV8_2:
                                 f"• *AI Win Prob*: *{win_prob:.2f}%*"
                             )
                             send_telegram_message(msg)
+                        else:
+                            # 🟢 V8.5 Funnel: Increment threshold rejection counter
+                            signal_funnel["rejected_threshold"] += 1
+                            save_state()
                             
                     except Exception as e:
                         print(f"[ERROR] Inference failed for {asset}: {e}", file=sys.stderr)
