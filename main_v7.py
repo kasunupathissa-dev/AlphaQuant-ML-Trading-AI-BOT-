@@ -292,6 +292,13 @@ async def execute_testnet_order(exchange, symbol, direction, amount, close_full=
             except Exception as sync_err:
                 print(f"[WARNING] Failed to fetch actual contracts for {symbol}: {sync_err}. Falling back to default amount.")
 
+        # Auto-configure leverage to 20x prior to placing order on Binance
+        try:
+            await asyncio.to_thread(exchange.set_leverage, 20, symbol)
+            print(f"[TESTNET] Automatically set leverage to 20x for {symbol}")
+        except Exception as lev_err:
+            print(f"[WARNING] Failed to set leverage to 20x for {symbol}: {lev_err}")
+
         order = await asyncio.to_thread(
             exchange.create_market_order,
             symbol=symbol,
