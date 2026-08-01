@@ -177,6 +177,7 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 def save_state():
+    global last_state_mtime
     state = {
         "asset_penalty_box": asset_penalty_box,
         "asset_recent_results": asset_recent_results,
@@ -188,28 +189,44 @@ def save_state():
     with open(config.STATE_FILE, 'w') as f:
         # Use the custom NumpyEncoder to prevent type errors
         json.dump(state, f, indent=4, cls=NumpyEncoder)
+    try:
+        last_state_mtime = os.path.getmtime(config.STATE_FILE)
+    except Exception:
+        last_state_mtime = 0
     print("[INFO] Bot state saved.")
 
 last_state_load_time = 0
+last_state_mtime = 0
 
-def load_state():
-    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time
-    current_time = time.time()
-    if current_time - last_state_load_time < 10:
-        return
-    last_state_load_time = current_time
+def load_state(force=False):
+    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time, last_state_mtime
     
-    if os.path.exists(config.STATE_FILE):
-        try:
-            with open(config.STATE_FILE, 'r') as f: state = json.load(f)
-            asset_penalty_box = state.get("asset_penalty_box", {})
-            asset_recent_results = state.get("asset_recent_results", {asset: [] for asset in config.TARGET_ASSETS})
-            active_trades = state.get("active_trades", [])
-            signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
-            trade_mode = state.get("trade_mode", "BOTH")
-            print("[SUCCESS] Bot state loaded from file.")
-        except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
-    else: print("[INFO] No state file found. Starting fresh.")
+    if not os.path.exists(config.STATE_FILE):
+        return
+        
+    try:
+        mtime = os.path.getmtime(config.STATE_FILE)
+    except Exception:
+        mtime = 0
+        
+    current_time = time.time()
+    # Skip loading only if file mtime hasn't changed, we're not forcing, and less than 1.5 seconds have elapsed
+    if not force and mtime == last_state_mtime and (current_time - last_state_load_time < 1.5):
+        return
+        
+    last_state_load_time = current_time
+    last_state_mtime = mtime
+    
+    try:
+        with open(config.STATE_FILE, 'r') as f: state = json.load(f)
+        asset_penalty_box = state.get("asset_penalty_box", {})
+        asset_recent_results = state.get("asset_recent_results", {asset: [] for asset in config.TARGET_ASSETS})
+        active_trades = state.get("active_trades", [])
+        signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
+        trade_mode = state.get("trade_mode", "BOTH")
+        print("[SUCCESS] Bot state loaded from file (synchronized).")
+    except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
+    except Exception as e: print(f"[WARNING] Failed to load state file: {e}")
 
 def send_telegram_message(msg):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
@@ -417,6 +434,8 @@ class AlphaQuantV8_2:
 
     async def manage_active_trades(self, symbol, current_price):
         global active_trades
+        if asset_locks.get(symbol, False):
+            return
         load_state()
         trade_closed = False
         updated_trades = [t for t in active_trades if t['asset'] != symbol]
@@ -528,6 +547,11 @@ class AlphaQuantV8_2:
                     remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['sl']) / trade['entry'])
 
             if is_closed:
+                # Lock asset immediately to prevent duplicate concurrent close executions
+                if asset_locks.get(symbol, False):
+                    continue
+                asset_locks[symbol] = True
+                
                 trade_closed = True
                 pnl = trade.get('locked_pnl', 0.0) + remaining_pnl
                 result = "PROFIT" if pnl >= 0 else "LOSS"
@@ -535,12 +559,15 @@ class AlphaQuantV8_2:
                 
                 # Execute Testnet order on exit (opposite direction)
                 exit_direction = 'SHORT' if trade['direction'] == 'LONG' else 'LONG'
-                await execute_testnet_order(
-                    self.exchange_reg,
-                    symbol=symbol,
-                    direction=exit_direction,
-                    amount=trade['position_size'] / trade['entry']
-                )
+                try:
+                    await execute_testnet_order(
+                        self.exchange_reg,
+                        symbol=symbol,
+                        direction=exit_direction,
+                        amount=trade['position_size'] / trade['entry']
+                    )
+                except Exception as close_order_err:
+                    print(f"[ERROR] Failed to execute Testnet close order for {symbol}: {close_order_err}")
                 
                 log_trade_to_csv(trade)
                 
