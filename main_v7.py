@@ -311,7 +311,8 @@ class AlphaQuantV8_2:
             'secret': getattr(config, 'BINANCE_API_SECRET', ''),
             'enableRateLimit': True,
             'options': {
-                'defaultType': 'future'
+                'defaultType': 'future',
+                'adjustForTimeDifference': True
             }
         }
         self.exchange_pro = ccxtpro.binance(exchange_config)

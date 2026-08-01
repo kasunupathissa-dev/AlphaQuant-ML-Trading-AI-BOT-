@@ -535,7 +535,8 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                     'secret': getattr(config, 'BINANCE_API_SECRET', ''),
                                     'enableRateLimit': True,
                                     'options': {
-                                        'defaultType': 'future'
+                                        'defaultType': 'future',
+                                        'adjustForTimeDifference': True
                                     }
                                 })
                                 exchange.enable_demo_trading(True)
