@@ -228,6 +228,41 @@ def load_state(force=False):
     except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
     except Exception as e: print(f"[WARNING] Failed to load state file: {e}")
 
+def log_backend_error(category, message):
+    global last_state_mtime
+    timestamp = get_local_time().strftime("%Y-%m-%d %H:%M:%S")
+    # 1. Log to file
+    try:
+        with open("backend_errors.log", "a", encoding="utf-8") as ef:
+            ef.write(f"[{timestamp}] [{category}] {message}\n")
+    except Exception as log_err:
+        print(f"[ERROR] Failed to write to backend_errors.log: {log_err}")
+    
+    # 2. Append to state latest_errors
+    try:
+        state_file_path = config.STATE_FILE
+        state = {}
+        if os.path.exists(state_file_path):
+            with open(state_file_path, 'r') as f:
+                state = json.load(f)
+        
+        errors = state.get("latest_errors", [])
+        errors.append({
+            "timestamp": timestamp,
+            "category": category,
+            "message": message
+        })
+        # Limit to 10 latest errors
+        if len(errors) > 10:
+            errors.pop(0)
+        
+        state["latest_errors"] = errors
+        with open(state_file_path, 'w') as f:
+            json.dump(state, f, indent=4, cls=NumpyEncoder)
+        last_state_mtime = os.path.getmtime(state_file_path)
+    except Exception as state_err:
+        print(f"[ERROR] Failed to update latest_errors in state: {state_err}")
+
 def send_telegram_message(msg):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
     try:
@@ -309,7 +344,7 @@ async def execute_testnet_order(exchange, symbol, direction, amount, close_full=
         print(f"[TESTNET] Placed {side.upper()} order for {amount:.6f} {symbol}. Order ID: {order_id}")
         return order_id
     except Exception as e:
-        print(f"[ERROR] Failed to execute Testnet order for {symbol} ({direction}): {e}")
+        log_backend_error("Binance API", f"Failed to execute Testnet order for {symbol} ({direction}): {e}")
         return None
 
 def log_trade_to_csv(trade):

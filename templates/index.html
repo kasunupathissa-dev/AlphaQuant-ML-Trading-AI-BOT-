@@ -836,6 +836,17 @@
             </div>
         </div>
 
+        <!-- Module: Backend Error Logs -->
+        <div class="panel span-12" id="error-log-panel">
+            <h3 style="display: flex; justify-content: space-between; align-items: center;">
+                <span>🚨 SYSTEM ERROR LOG</span>
+                <button class="nav-btn" onclick="clearBackendErrors()" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: var(--color-short); font-size: 11px; padding: 4px 10px; margin: 0;">🗑️ Clear Logs</button>
+            </h3>
+            <div id="error-log-list" style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Loaded dynamically -->
+            </div>
+        </div>
+
         <!-- Module 8: Control Center -->
         <div class="panel span-12">
             <h3>⚙️ CONTROL CENTER</h3>
@@ -2386,6 +2397,7 @@
                 updateHourlyHeatmap(stats.hourly_performance);
                 updateRecentTrades(trades);
                 updateControlCenter(state);
+                updateErrorLog(state);
 
             } catch (e) {
                 console.error("Dashboard refresh failed: ", e);
@@ -2748,6 +2760,47 @@
             } else {
                 footerEl.innerHTML = `✅ All target assets active. No performance freezes in penalty box.`;
                 footerEl.style.color = 'var(--text-secondary)';
+            }
+        }
+
+        function updateErrorLog(state) {
+            const list = document.getElementById('error-log-list');
+            if (!list) return;
+            const errors = state.latest_errors || [];
+            if (errors.length === 0) {
+                list.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px; color: var(--color-win); font-size: 13px; padding: 10px 0;">
+                        <span>🟢</span> All systems healthy. No backend errors detected.
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            errors.forEach(err => {
+                html += `
+                    <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-family: var(--font-mono);">
+                        <div>
+                            <span style="color: var(--color-short); font-weight: bold; margin-right: 8px;">[${err.timestamp}] [${err.category}]</span>
+                            <span style="color: #fff;">${err.message}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        async function clearBackendErrors() {
+            try {
+                const response = await fetch('/api/clear_errors', { method: 'POST' });
+                const res = await response.json();
+                if (res.status === 'success') {
+                    fetchDashboardData();
+                } else {
+                    alert('Failed to clear errors: ' + res.message);
+                }
+            } catch (err) {
+                console.error('Failed to clear backend errors:', err);
             }
         }
 

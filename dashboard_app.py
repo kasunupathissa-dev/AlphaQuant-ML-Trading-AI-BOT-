@@ -40,6 +40,37 @@ STATE_FILE = "live_engine_state.json"
 LOG_FILE = "trading_log_v8.csv"
 TEMPLATES_DIR = "templates"
 
+def log_backend_error(category, message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 1. Log to file
+    try:
+        with open("backend_errors.log", "a", encoding="utf-8") as ef:
+            ef.write(f"[{timestamp}] [{category}] {message}\n")
+    except Exception as log_err:
+        print(f"[ERROR] Failed to write to backend_errors.log: {log_err}")
+    
+    # 2. Append to state latest_errors
+    try:
+        state_data = {}
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r') as f:
+                state_data = json.load(f)
+        
+        errors = state_data.get("latest_errors", [])
+        errors.append({
+            "timestamp": timestamp,
+            "category": category,
+            "message": message
+        })
+        if len(errors) > 10:
+            errors.pop(0)
+        
+        state_data["latest_errors"] = errors
+        with open(STATE_FILE, 'w') as f:
+            json.dump(state_data, f, indent=4)
+    except Exception as state_err:
+        print(f"[ERROR] Failed to update latest_errors in state: {state_err}")
+
 class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Silence default logger to keep terminal output clean
@@ -566,7 +597,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                     )
                                     print(f"[API TESTNET] Force closed position for {asset} on Testnet. Order ID: {order.get('id')}")
                             except Exception as testnet_err:
-                                print(f"[ERROR] Failed to place manual close order on Testnet for {asset}: {testnet_err}")
+                                log_backend_error("Manual Close", f"Failed to place manual close order on Testnet for {asset}: {testnet_err}")
                     
                     state_data["active_trades"] = [t for t in trades if t["asset"] != asset]
                     
@@ -591,6 +622,20 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"status": "success", "state": state_data})
             except Exception as e:
                 self.send_json({"status": "error", "message": str(e)}, 400)
+        elif self.path == '/api/clear_errors':
+            try:
+                state_data = {}
+                if os.path.exists(STATE_FILE):
+                    with open(STATE_FILE, 'r') as f:
+                        state_data = json.load(f)
+                
+                state_data["latest_errors"] = []
+                with open(STATE_FILE, 'w') as f:
+                    json.dump(state_data, f, indent=4)
+                
+                self.send_json({"status": "success"})
+            except Exception as e:
+                self.send_json({"status": "error", "message": str(e)}, 500)
         elif self.path == '/api/retrain':
             try:
                 import subprocess
