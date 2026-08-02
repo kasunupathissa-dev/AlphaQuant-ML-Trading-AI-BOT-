@@ -598,6 +598,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                     print(f"[API TESTNET] Force closed position for {asset} on Testnet. Order ID: {order.get('id')}")
                             except Exception as testnet_err:
                                 log_backend_error("Manual Close", f"Failed to place manual close order on Testnet for {asset}: {testnet_err}")
+                                raise Exception(f"Failed to place manual close order on Binance Testnet: {testnet_err}")
                     
                     state_data["active_trades"] = [t for t in trades if t["asset"] != asset]
                     

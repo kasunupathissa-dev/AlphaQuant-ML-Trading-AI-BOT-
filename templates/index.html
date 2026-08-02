@@ -2561,9 +2561,11 @@
                 const data = await res.json();
                 if (data.status === 'success') {
                     fetchDashboardData();
+                } else {
+                    alert("Failed to force close position: " + data.message);
                 }
             } catch (e) {
-                alert("Failed to force close position.");
+                alert("Failed to force close position: " + e.message);
             } finally {
                 closeForceCloseModal();
             }
