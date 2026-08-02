@@ -178,14 +178,23 @@ class NumpyEncoder(json.JSONEncoder):
 
 def save_state():
     global last_state_mtime
-    state = {
+    state = {}
+    if os.path.exists(config.STATE_FILE):
+        try:
+            with open(config.STATE_FILE, 'r') as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+            
+    state.update({
         "asset_penalty_box": asset_penalty_box,
         "asset_recent_results": asset_recent_results,
         "active_trades": active_trades,
         "signal_funnel": signal_funnel,
         "live_prices": live_prices,
         "trade_mode": trade_mode
-    }
+    })
+    
     with open(config.STATE_FILE, 'w') as f:
         # Use the custom NumpyEncoder to prevent type errors
         json.dump(state, f, indent=4, cls=NumpyEncoder)
