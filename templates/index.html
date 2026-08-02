@@ -496,10 +496,131 @@
             100% { opacity: 0.4; }
         }
 
-        /* Responsive Layout */
+        /* Responsive Layout Utilities */
+        .table-responsive {
+            display: block;
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .drilldown-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 12px 20px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+
         @media (max-width: 1024px) {
             .span-8, .span-4, .span-6 {
                 grid-column: span 12;
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 16px;
+                padding: 16px;
+            }
+            .brand {
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                justify-content: center;
+            }
+            .brand span {
+                display: none !important;
+            }
+            .nav-btn {
+                margin: 4px 2px;
+                padding: 8px 10px;
+                font-size: 10px;
+                flex: 1;
+            }
+            .header-stats {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                font-size: 11px;
+                width: 100%;
+                border-top: 1px solid var(--border-color);
+                padding-top: 12px;
+            }
+            .header-stat-item {
+                justify-content: space-between;
+                background: rgba(255, 255, 255, 0.02);
+                padding: 6px 10px;
+                border-radius: 6px;
+                border: 1px solid var(--border-color);
+            }
+            .dashboard-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .panel {
+                padding: 16px;
+            }
+            .metric-row {
+                gap: 8px;
+            }
+            .metric-value {
+                font-size: 16px;
+            }
+            .heatmap-grid {
+                grid-template-columns: repeat(6, 1fr);
+                gap: 4px;
+            }
+            .heatmap-box {
+                font-size: 9px;
+            }
+            .control-grid {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 16px;
+            }
+            .mode-selectors {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                width: 100%;
+            }
+            .mode-btn {
+                width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                padding: 10px;
+            }
+            .action-buttons {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                width: 100%;
+            }
+            .action-btn {
+                width: 100%;
+                padding: 12px;
+            }
+            .drilldown-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+                padding: 16px;
+            }
+            .drilldown-header h1 {
+                text-align: center;
+                font-size: 16px;
             }
         }
     </style>
@@ -606,23 +727,25 @@
                     TOTAL EXPOSURE: <strong id="active-total-exposure">$0.00</strong>
                 </span>
             </h3>
-            <table id="active-trades-table">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th>Side</th>
-                        <th>Entry</th>
-                        <th>Current</th>
-                        <th>P&L</th>
-                        <th>P&L %</th>
-                        <th>Time</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="active-trades-body">
-                    <!-- Loaded dynamically -->
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table id="active-trades-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Entry</th>
+                            <th>Current</th>
+                            <th>P&L</th>
+                            <th>P&L %</th>
+                            <th>Time</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="active-trades-body">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
             <div id="active-trades-empty" style="text-align: center; padding: 20px; color: var(--text-secondary); font-size: 13px;">No active trades currently open.</div>
         </div>
 
@@ -695,20 +818,22 @@
         <!-- Module 7: Recent Trades -->
         <div class="panel span-6">
             <h3>📋 RECENT TRADES (Last 5)</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Asset</th>
-                        <th>Side</th>
-                        <th>P&L</th>
-                        <th>Result</th>
-                    </tr>
-                </thead>
-                <tbody id="recent-trades-body">
-                    <!-- Rendered dynamically -->
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Asset</th>
+                            <th>Side</th>
+                            <th>P&L</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-trades-body">
+                        <!-- Rendered dynamically -->
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Module 8: Control Center -->
@@ -738,7 +863,7 @@
     <!-- --- Asset Detail View (Drill-Down) --- -->
     <div id="detail-view" style="display: none;">
         <!-- Top bar -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+        <div class="drilldown-header">
             <button class="action-btn" onclick="hideAssetDetails()" style="font-weight: bold;">← BACK TO DASHBOARD</button>
             <h1 id="detail-title" style="font-size: 18px; font-weight: 800; text-transform: uppercase;">📊 BTC/USDT DETAILS</h1>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -823,19 +948,21 @@
             <!-- Performance by Signal Type -->
             <div class="panel span-6">
                 <h3>📈 PERFORMANCE BY SIGNAL TYPE</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Signal Type</th>
-                            <th>Trades</th>
-                            <th>Win Rate</th>
-                            <th>Net P&L</th>
-                        </tr>
-                    </thead>
-                    <tbody id="detail-signal-perf-body">
-                        <!-- Loaded dynamically -->
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Signal Type</th>
+                                <th>Trades</th>
+                                <th>Win Rate</th>
+                                <th>Net P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-signal-perf-body">
+                            <!-- Loaded dynamically -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -848,30 +975,32 @@
                     <button class="mode-btn" style="padding: 4px 10px; font-size:11px;" onclick="exportAssetCSV()">Export CSV</button>
                 </div>
             </h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Side</th>
-                        <th>Entry</th>
-                        <th>Exit</th>
-                        <th>P&L</th>
-                        <th>Hold Time</th>
-                        <th>Result</th>
-                        <th>Signal</th>
-                    </tr>
-                </thead>
-                <tbody id="detail-trades-body">
-                    <!-- Loaded dynamically -->
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Side</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P&L</th>
+                            <th>Hold Time</th>
+                            <th>Result</th>
+                            <th>Signal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-trades-body">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div> <!-- End of detail-view -->
 
     <!-- --- Asset Model Health & Calibration View --- -->
     <div id="calibration-view" style="display: none;">
         <!-- Top bar -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+        <div class="drilldown-header">
             <button class="action-btn" onclick="switchToView('dashboard')" style="font-weight: bold;">← BACK TO DASHBOARD</button>
             <h1 style="font-size: 18px; font-weight: 800; text-transform: uppercase;">📊 MODEL HEALTH & CALIBRATION</h1>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -935,60 +1064,62 @@
         <!-- Model Metrics Table -->
         <div class="panel">
             <h3>🧠 MODEL METRICS</h3>
-            <table style="margin-top: 12px; width: 100%;">
-                <thead>
-                    <tr>
-                        <th>Metric</th>
-                        <th>Current</th>
-                        <th>Target</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Calibration Quality</strong></td>
-                        <td id="table-cal-quality">27%</td>
-                        <td>&gt;70%</td>
-                        <td><span id="table-cal-status" class="badge">Checking...</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Brier Score</strong></td>
-                        <td id="table-brier">0.26</td>
-                        <td>&lt;0.10</td>
-                        <td><span id="table-brier-status" class="badge">Checking...</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Log Loss</strong></td>
-                        <td id="table-log-loss">0.68</td>
-                        <td>&lt;0.50</td>
-                        <td><span id="table-log-loss-status" class="badge">Checking...</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>AUC-ROC</strong></td>
-                        <td id="table-auc">0.58</td>
-                        <td>&gt;0.70</td>
-                        <td><span id="table-auc-status" class="badge">Checking...</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Last Retrain</strong></td>
-                        <td id="table-last-retrain">185 days ago</td>
-                        <td>&lt;30 days</td>
-                        <td><span id="table-last-retrain-status" class="badge">Checking...</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Training Data Size</strong></td>
-                        <td id="table-data-size">45,000 rows</td>
-                        <td>&gt;50,000 rows</td>
-                        <td><span id="table-data-size-status" class="badge badge-win">GOOD</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Feature Count</strong></td>
-                        <td id="table-features">8</td>
-                        <td>20+</td>
-                        <td><span id="table-features-status" class="badge badge-loss">LOW</span></td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table style="margin-top: 12px; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Current</th>
+                            <th>Target</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Calibration Quality</strong></td>
+                            <td id="table-cal-quality">27%</td>
+                            <td>&gt;70%</td>
+                            <td><span id="table-cal-status" class="badge">Checking...</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Brier Score</strong></td>
+                            <td id="table-brier">0.26</td>
+                            <td>&lt;0.10</td>
+                            <td><span id="table-brier-status" class="badge">Checking...</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Log Loss</strong></td>
+                            <td id="table-log-loss">0.68</td>
+                            <td>&lt;0.50</td>
+                            <td><span id="table-log-loss-status" class="badge">Checking...</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>AUC-ROC</strong></td>
+                            <td id="table-auc">0.58</td>
+                            <td>&gt;0.70</td>
+                            <td><span id="table-auc-status" class="badge">Checking...</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Last Retrain</strong></td>
+                            <td id="table-last-retrain">185 days ago</td>
+                            <td>&lt;30 days</td>
+                            <td><span id="table-last-retrain-status" class="badge">Checking...</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Training Data Size</strong></td>
+                            <td id="table-data-size">45,000 rows</td>
+                            <td>&gt;50,000 rows</td>
+                            <td><span id="table-data-size-status" class="badge badge-win">GOOD</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Feature Count</strong></td>
+                            <td id="table-features">8</td>
+                            <td>20+</td>
+                            <td><span id="table-features-status" class="badge badge-loss">LOW</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
             <div style="display: flex; gap: 12px; margin-top: 20px;">
                 <button class="action-btn" onclick="triggerRetrain()">🔄 Retrain Now</button>
                 <button class="action-btn" onclick="generateCalibrationReport()">📊 Generate Calibration Report</button>
@@ -1000,7 +1131,7 @@
     <!-- --- Settings & Configuration View --- -->
     <div id="config-view" style="display: none;">
         <!-- Top bar -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+        <div class="drilldown-header">
             <button class="action-btn" onclick="switchToView('dashboard')" style="font-weight: bold;">← BACK TO DASHBOARD</button>
             <h1 style="font-size: 18px; font-weight: 800; text-transform: uppercase;">⚙️ CONFIGURATION</h1>
             <span id="config-last-saved" style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">🔄 Last saved: N/A</span>
@@ -1023,47 +1154,49 @@
         <!-- Threshold Configuration -->
         <div class="panel" style="margin-bottom: 16px;">
             <h3>🎯 THRESHOLD CONFIGURATION</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr>
-                        <th style="width: 40%; text-align: left; padding: 10px 12px; color: var(--text-secondary);">Setting</th>
-                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td style="padding:12px;">Base LONG Threshold</td>
-                        <td style="padding:12px;">
-                            <input type="number" id="cfg-long-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="65.0"> %
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:12px;">Base SHORT Threshold</td>
-                        <td style="padding:12px;">
-                            <input type="number" id="cfg-short-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="65.0"> % 
-                            <span style="font-size:11px; color:var(--text-secondary); margin-left:12px;">(Dynamic override: 72.0%)</span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:12px;">Dynamic Threshold Enabled</td>
-                        <td style="padding:12px;">
-                            <input type="checkbox" id="cfg-dynamic-enabled" checked> Yes
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:12px;">Minimum Threshold</td>
-                        <td style="padding:12px;">
-                            <input type="number" id="cfg-min-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="55.0"> %
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:12px;">Maximum Threshold</td>
-                        <td style="padding:12px;">
-                            <input type="number" id="cfg-max-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="85.0"> %
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="width: 40%; text-align: left; padding: 10px 12px; color: var(--text-secondary);">Setting</th>
+                            <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding:12px;">Base LONG Threshold</td>
+                            <td style="padding:12px;">
+                                <input type="number" id="cfg-long-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="65.0"> %
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:12px;">Base SHORT Threshold</td>
+                            <td style="padding:12px;">
+                                <input type="number" id="cfg-short-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="65.0"> % 
+                                <span style="font-size:11px; color:var(--text-secondary); margin-left:12px;">(Dynamic override: 72.0%)</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:12px;">Dynamic Threshold Enabled</td>
+                            <td style="padding:12px;">
+                                <input type="checkbox" id="cfg-dynamic-enabled" checked> Yes
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:12px;">Minimum Threshold</td>
+                            <td style="padding:12px;">
+                                <input type="number" id="cfg-min-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="55.0"> %
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:12px;">Maximum Threshold</td>
+                            <td style="padding:12px;">
+                                <input type="number" id="cfg-max-threshold" step="0.5" style="background:#151821; border:1px solid var(--border-color); color:#fff; padding:6px 12px; border-radius:6px; width:100px; text-align:center;" value="85.0"> %
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
             <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px;">
                 💡 Current dynamic thresholds: LONG=65.0%, SHORT=72.0% (based on recent performance)
             </div>
@@ -1200,7 +1333,7 @@
     <!-- --- Penalty Box View --- -->
     <div id="penalty-view" style="display: none;">
         <!-- Top bar -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px 20px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--card-shadow);">
+        <div class="drilldown-header">
             <button class="action-btn" onclick="switchToView('dashboard')" style="font-weight: bold;">← BACK TO DASHBOARD</button>
             <h1 style="font-size: 18px; font-weight: 800; text-transform: uppercase;">🚫 PENALTY BOX</h1>
             <span id="penalty-active-count" style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">🔄 0 assets active</span>
@@ -1209,20 +1342,22 @@
         <!-- Penalty Box Table Panel -->
         <div class="panel" style="margin-bottom: 16px;">
             <h3>⚠️ ASSETS CURRENTLY IN PENALTY BOX</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
-                <thead>
-                    <tr>
-                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Asset</th>
-                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Status</th>
-                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Time Left</th>
-                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Loss Streak</th>
-                        <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="penalty-box-table-body">
-                    <!-- Loaded dynamically -->
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Asset</th>
+                            <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Status</th>
+                            <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Time Left</th>
+                            <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Loss Streak</th>
+                            <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="penalty-box-table-body">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Penalty Box Performance Chart -->
