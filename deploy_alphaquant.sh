@@ -50,6 +50,7 @@ ExecStart=$PYTHON_BIN main_v7.py
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-$REPO_DIR/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -69,6 +70,7 @@ ExecStart=$PYTHON_BIN dashboard_app.py $PORT
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-$REPO_DIR/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -88,6 +90,7 @@ ExecStart=$PYTHON_BIN auto_trainer_daemon.py
 Restart=always
 RestartSec=30
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-$REPO_DIR/.env
 
 [Install]
 WantedBy=multi-user.target
