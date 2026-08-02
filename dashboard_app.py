@@ -531,33 +531,6 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                             
                         realized_pnl = locked_pnl + remaining_pnl
                         
-                        # Log to CSV file
-                        try:
-                            file_exists = os.path.isfile(LOG_FILE)
-                            with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
-                                writer = csv.writer(f)
-                                if not file_exists:
-                                    writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
-                                
-                                result = "PROFIT" if realized_pnl >= 0 else "LOSS"
-                                ai_prob_str = f"{target_trade.get('ai_prob', 50.0):.2f}%"
-                                timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                writer.writerow([
-                                    timestamp_str,
-                                    target_trade["asset"],
-                                    target_trade["direction"],
-                                    f"{target_trade['entry']:.4f}",
-                                    f"{target_trade['tp']:.4f}",
-                                    f"{target_trade['sl']:.4f}",
-                                    result,
-                                    ai_prob_str,
-                                    f"{realized_pnl:.2f}",
-                                    target_trade.get("signal_type", "SHOTGUN")
-                                ])
-                            print(f"[API] Manual close log written for {asset}. Realized P&L: ${realized_pnl:.2f}")
-                        except Exception as csv_err:
-                            print(f"[ERROR] Failed to log manually closed trade to CSV: {csv_err}")
-                            
                         # Execute Testnet order on exit (opposite direction) if enabled
                         if getattr(config, 'USE_TESTNET', False) and getattr(config, 'BINANCE_API_KEY', ''):
                             try:
@@ -599,7 +572,34 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                             except Exception as testnet_err:
                                 log_backend_error("Manual Close", f"Failed to place manual close order on Testnet for {asset}: {testnet_err}")
                                 raise Exception(f"Failed to place manual close order on Binance Testnet: {testnet_err}")
-                    
+                        
+                        # Log to CSV file (Only after successful Binance exit)
+                        try:
+                            file_exists = os.path.isfile(LOG_FILE)
+                            with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
+                                writer = csv.writer(f)
+                                if not file_exists:
+                                    writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
+                                
+                                result = "PROFIT" if realized_pnl >= 0 else "LOSS"
+                                ai_prob_str = f"{target_trade.get('ai_prob', 50.0):.2f}%"
+                                timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                writer.writerow([
+                                    timestamp_str,
+                                    target_trade["asset"],
+                                    target_trade["direction"],
+                                    f"{target_trade['entry']:.4f}",
+                                    f"{target_trade['tp']:.4f}",
+                                    f"{target_trade['sl']:.4f}",
+                                    result,
+                                    ai_prob_str,
+                                    f"{realized_pnl:.2f}",
+                                    target_trade.get("signal_type", "SHOTGUN")
+                                ])
+                            print(f"[API] Manual close log written for {asset}. Realized P&L: ${realized_pnl:.2f}")
+                        except Exception as csv_err:
+                            print(f"[ERROR] Failed to log manually closed trade to CSV: {csv_err}")
+                     
                     state_data["active_trades"] = [t for t in trades if t["asset"] != asset]
                     
                     # Also freeze the asset in the penalty box for 24h if explicitly requested
