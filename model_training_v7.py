@@ -91,21 +91,19 @@ def train_shotgun_models():
             print(f"  [ERROR] DB Read failed: {e}")
             continue
         
-        df.dropna(subset=['target_label'], inplace=True)
-        # 🟢 V8.5 Upgrade: Dynamically drop rare classes (<10 samples) to prevent CV splitter crashes
-        class_counts = df['target_label'].value_counts()
-        rare_classes = class_counts[class_counts < 10].index
-        if len(rare_classes) > 0:
-            print(f"  [CLEANUP] Dropping rare classes {list(rare_classes)} with <10 samples.")
-            df = df[~df['target_label'].isin(rare_classes)].copy()
-            
+        # Only select rows with binary meta-labels (0 = failure, 1 = success)
+        df = df[df['target_label'].isin([0, 1])].copy()
         df['target_label'] = df['target_label'].astype(int)
         
-        if len(df) < 100 or df['target_label'].nunique() < 2:
-            print(f"  [SKIP] Insufficient or non-diverse data for {asset}. Skipping.")
+        if len(df) < 50 or df['target_label'].nunique() < 2:
+            print(f"  [SKIP] Insufficient or non-diverse triggered signals data for {asset} (Rows: {len(df)}). Skipping.")
             continue
 
-        features = ['dist_ema_50', 'dist_ema_200', 'atr_pct', 'volume_zscore', 'adx_14', 'bb_width', 'funding_rate_zscore', 'oi_zscore']
+        # Expanded Technical Indicator Pool (DTIP)
+        features = [
+            'dist_ema_50', 'dist_ema_200', 'atr_pct', 'volume_zscore', 'adx_14', 'bb_width',
+            'funding_rate_zscore', 'oi_zscore', 'rsi_14', 'macd_hist', 'supertrend_direction'
+        ]
         X = df[features]
         y = df['target_label']
 
@@ -114,19 +112,11 @@ def train_shotgun_models():
         class_weights = y_train.value_counts(normalize=True)
         weights = y_train.apply(lambda x: 1 / class_weights[x])
         
-        # 🟢 V8.5 Debug: Verify weight propagation parameters
         print(f"  [DEBUG] Weight range: min={weights.min():.2f}, max={weights.max():.2f}")
         print(f"  [DEBUG] Class distribution in y_train: {y_train.value_counts().to_dict()}")
 
-        num_classes = df['target_label'].nunique()
-        if num_classes == 2:
-            objective = 'binary:logistic'
-            eval_metric = 'logloss'
-            num_class_param = {}
-        else:
-            objective = 'multi:softprob'
-            eval_metric = 'mlogloss'
-            num_class_param = {'num_class': num_classes}
+        objective = 'binary:logistic'
+        eval_metric = 'logloss'
 
         base_model = xgb.XGBClassifier(
             objective=objective,
@@ -136,8 +126,7 @@ def train_shotgun_models():
             subsample=0.8,
             colsample_bytree=0.8,
             eval_metric=eval_metric,
-            random_state=42,
-            **num_class_param
+            random_state=42
         )
 
         # Wrap in calibration model (Isotonic Regression)
@@ -150,26 +139,20 @@ def train_shotgun_models():
 
         # Calculate Brier Score
         brier = multiclass_brier_score(y_test.values, y_prob)
-        print(f"  [CALIBRATION] Multiclass Brier Score: {brier:.4f}")
+        print(f"  [CALIBRATION] Binary Brier Score: {brier:.4f}")
 
         # Calibration Curves (Reliability Check)
         try:
-            # LONG Class calibration
+            # SUCCESS (Class 1) calibration curve
             true_l, pred_l = calibration_curve(y_test == 1, y_prob[:, 1], n_bins=5)
-            print("  [CALIBRATION] LONG class reliability (Predicted vs True):")
+            print("  [CALIBRATION] SUCCESS class reliability (Predicted vs True):")
             for p_pred, p_true in zip(pred_l, true_l):
-                print(f"    - Pred Prob: {p_pred:.2f} ==> True Freq: {p_true:.2f}")
-                
-            # SHORT Class calibration
-            true_s, pred_s = calibration_curve(y_test == 0, y_prob[:, 0], n_bins=5)
-            print("  [CALIBRATION] SHORT class reliability (Predicted vs True):")
-            for p_pred, p_true in zip(pred_s, true_s):
                 print(f"    - Pred Prob: {p_pred:.2f} ==> True Freq: {p_true:.2f}")
         except Exception as ce:
             print(f"  [WARNING] Could not compute complete reliability curve bins: {ce}")
 
         print("\n--- Model Performance on Test Set ---")
-        print(classification_report(y_test, y_pred, labels=[0, 1], target_names=['SHORT', 'LONG'], zero_division=0))
+        print(classification_report(y_test, y_pred, labels=[0, 1], target_names=['FAILURE', 'SUCCESS'], zero_division=0))
         
         brain = {
             'model': model,
@@ -180,7 +163,7 @@ def train_shotgun_models():
         joblib.dump(brain, safe_filename)
         print(f"\n  [SUCCESS] Saved Shotgun Calibrated Brain to {safe_filename}")
 
-        # 🟢 V8.4 Upgrade: Weekly Calibration Drift Tracking
+        # Weekly Calibration Drift Tracking
         metadata_file = "model_metadata.json"
         metadata = {}
         if os.path.exists(metadata_file):
@@ -193,18 +176,13 @@ def train_shotgun_models():
         metadata_entry = {
             'last_trained': str(pd.Timestamp.now()),
             'brier_score': float(brier),
-            'long_reliability': [],
-            'short_reliability': []
+            'success_reliability': []
         }
         
         try:
             true_l, pred_l = calibration_curve(y_test == 1, y_prob[:, 1], n_bins=5)
             for p_pred, p_true in zip(pred_l, true_l):
-                metadata_entry['long_reliability'].append({'pred': float(p_pred), 'true': float(p_true)})
-                
-            true_s, pred_s = calibration_curve(y_test == 0, y_prob[:, 0], n_bins=5)
-            for p_pred, p_true in zip(pred_s, true_s):
-                metadata_entry['short_reliability'].append({'pred': float(p_pred), 'true': float(p_true)})
+                metadata_entry['success_reliability'].append({'pred': float(p_pred), 'true': float(p_true)})
         except Exception:
             pass
             

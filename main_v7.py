@@ -727,17 +727,21 @@ class AlphaQuantV8_2:
                         
                         X_live = pd.DataFrame([last_closed[features_list]], columns=features_list)
                         
-                        prediction = brain_pack['model'].predict(X_live)[0]
-                        probabilities = brain_pack['model'].predict_proba(X_live)[0]
+                        # Binary Confirmation Mechanism (BCM)
+                        # Check if a primary technical signal is triggered at the last closed bar
+                        primary_sig = int(last_closed['primary_signal'])
+                        if primary_sig not in [0, 1]:
+                            continue
+                            
+                        direction = "LONG" if primary_sig == 1 else "SHORT"
                         
-                        if prediction == 2: continue
+                        probabilities = brain_pack['model'].predict_proba(X_live)[0]
+                        # Win probability is the probability of class 1 (SUCCESS)
+                        win_prob = probabilities[1] * 100
 
                         # 🟢 V8.5 Funnel: Increment generated signal count
                         signal_funnel["generated"] += 1
                         save_state()
-
-                        direction = "LONG" if prediction == 1 else "SHORT"
-                        win_prob = probabilities[prediction] * 100
                         
                         # 🟢 V8.5 Switch: Enforce Trade Mode direction settings
                         if trade_mode == "OFF":
@@ -878,7 +882,10 @@ class AlphaQuantV8_2:
                                     "adx_14": float(last_closed['adx_14']),
                                     "funding_rate_zscore": float(last_closed['funding_rate_zscore']),
                                     "oi_zscore": float(last_closed['oi_zscore']),
-                                    "bb_width": float(last_closed['bb_width'])
+                                    "bb_width": float(last_closed['bb_width']),
+                                    "rsi_14": float(last_closed['rsi_14']),
+                                    "macd_hist": float(last_closed['macd_hist']),
+                                    "supertrend_direction": float(last_closed['supertrend_direction'])
                                 }
                             })
                             asset_locks[asset] = True

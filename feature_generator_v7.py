@@ -25,8 +25,16 @@ class V7_FeatureStore:
             oi_tf = '15m' if config.TIMEFRAME == '15m' else '1h'
             oi_history = self.exchange.fetch_open_interest_history(asset, oi_tf, since=start_time, limit=1000)
             
-            funding_df = pd.DataFrame(funding_history)[['timestamp', 'fundingRate']]
-            oi_df = pd.DataFrame(oi_history)[['timestamp', 'openInterestAmount']]
+            # Convert funding and Open Interest to DataFrames
+            funding_list = []
+            for f in funding_history:
+                funding_list.append({'timestamp': f['timestamp'], 'fundingRate': f['fundingRate']})
+            funding_df = pd.DataFrame(funding_list)
+            
+            oi_list = []
+            for o in oi_history:
+                oi_list.append({'timestamp': o['timestamp'], 'openInterestAmount': o['openInterestAmount']})
+            oi_df = pd.DataFrame(oi_list)
 
             funding_df['timestamp'] = pd.to_datetime(funding_df['timestamp'], unit='ms')
             oi_df['timestamp'] = pd.to_datetime(oi_df['timestamp'], unit='ms')
@@ -56,6 +64,7 @@ class V7_FeatureStore:
                 id INT AUTO_INCREMENT PRIMARY KEY, asset VARCHAR(20) NOT NULL, timestamp BIGINT NOT NULL,
                 dist_ema_50 DOUBLE, dist_ema_200 DOUBLE, atr_pct DOUBLE, volume_zscore DOUBLE, adx_14 DOUBLE, bb_width DOUBLE,
                 funding_rate_zscore DOUBLE, oi_zscore DOUBLE,
+                rsi_14 DOUBLE, macd_hist DOUBLE, supertrend_direction DOUBLE, primary_signal INT,
                 target_label INT,
                 UNIQUE INDEX idx_asset_timestamp (asset, timestamp)
             )'''))
@@ -90,7 +99,7 @@ class V7_FeatureStore:
                 
                 columns_to_insert = [
                     'asset', 'timestamp', 'dist_ema_50', 'dist_ema_200', 'atr_pct', 'volume_zscore', 'adx_14', 'bb_width',
-                    'funding_rate_zscore', 'oi_zscore'
+                    'funding_rate_zscore', 'oi_zscore', 'rsi_14', 'macd_hist', 'supertrend_direction', 'primary_signal'
                 ]
                 insert_df = final_df.reset_index()[columns_to_insert]
 

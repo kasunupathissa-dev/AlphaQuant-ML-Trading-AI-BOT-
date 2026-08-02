@@ -17,17 +17,23 @@ def calculate_atr(df, period=14):
 
 def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_hours=24):
     """
-    Calculates a single multi-class label based on the first barrier touched.
-    - 1: LONG (Upper barrier hit first)
-    - 0: SHORT (Lower barrier hit first)
-    - 2: HOLD (Neither barrier hit within the time limit)
+    Calculates a binary label based on the outcome of the primary_signal:
+    - 1: SUCCESS (Price hits TP before SL in the direction of primary_signal)
+    - 0: FAILURE (Price hits SL first, or times out/reaches time limit)
+    - -1: IGNORE (No primary signal was generated for this candle)
     """
-    labels = pd.Series(2, index=df.index, dtype=int)
+    labels = pd.Series(-1, index=df.index, dtype=int)
     atr_series = calculate_atr(df, config.ATR_PERIOD)
     
     df_dt_index = df.set_index(pd.to_datetime(df['timestamp'], unit='ms'))
 
     for i in range(len(df)):
+        primary_sig = df['primary_signal'].iloc[i]
+        
+        # If no primary signal was generated, this row is ignored
+        if primary_sig == -1 or pd.isna(primary_sig):
+            continue
+            
         entry_price = df['close'].iloc[i]
         current_atr = atr_series.iloc[i]
         entry_time = df_dt_index.index[i]
@@ -35,8 +41,15 @@ def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_ho
         if pd.isna(current_atr) or current_atr <= 0:
             continue
 
-        upper_barrier = entry_price + (current_atr * atr_tp_mult)
-        lower_barrier = entry_price - (current_atr * atr_sl_mult)
+        # Set TP/SL barriers based on primary signal direction
+        if primary_sig == 1: # LONG
+            upper_barrier = entry_price + (current_atr * atr_tp_mult)
+            lower_barrier = entry_price - (current_atr * atr_sl_mult)
+        elif primary_sig == 0: # SHORT
+            upper_barrier = entry_price + (current_atr * atr_sl_mult)
+            lower_barrier = entry_price - (current_atr * atr_tp_mult)
+        else:
+            continue
 
         end_time = entry_time + pd.Timedelta(hours=time_limit_hours)
         future_window = df_dt_index.loc[entry_time:end_time].iloc[1:]
@@ -47,27 +60,35 @@ def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_ho
         first_touch_upper = future_window[future_window['high'] >= upper_barrier].index.min()
         first_touch_lower = future_window[future_window['low'] <= lower_barrier].index.min()
 
-        # 🟢 V8.4 Cost Penalty Check: Keep physical barriers unchanged to avoid distorting SL.
-        # Demote wins to HOLD (2) if the profit target does not clear 20 bps transaction costs.
-        cost_pct = 0.0020
-        raw_label = 2
+        raw_label = 0 # Default to failure (times out or hits opposite)
         
-        if pd.notna(first_touch_upper) and pd.notna(first_touch_lower):
-            raw_label = 1 if first_touch_upper < first_touch_lower else 0
-        elif pd.notna(first_touch_upper):
-            raw_label = 1
-        elif pd.notna(first_touch_lower):
-            raw_label = 0
+        if primary_sig == 1: # LONG
+            if pd.notna(first_touch_upper) and pd.notna(first_touch_lower):
+                raw_label = 1 if first_touch_upper < first_touch_lower else 0
+            elif pd.notna(first_touch_upper):
+                raw_label = 1
+            elif pd.notna(first_touch_lower):
+                raw_label = 0
+        elif primary_sig == 0: # SHORT
+            if pd.notna(first_touch_lower) and pd.notna(first_touch_upper):
+                raw_label = 1 if first_touch_lower < first_touch_upper else 0
+            elif pd.notna(first_touch_lower):
+                raw_label = 1
+            elif pd.notna(first_touch_upper):
+                raw_label = 0
 
+        # Cost penalty check: ensure gross return clears 20 bps cost
+        cost_pct = 0.0020
         if raw_label == 1:
-            gross_return = (upper_barrier - entry_price) / entry_price
-            labels.iloc[i] = 1 if gross_return > cost_pct else 2
-        elif raw_label == 0:
-            gross_return = (entry_price - lower_barrier) / entry_price
-            labels.iloc[i] = 0 if gross_return > cost_pct else 2
-        else:
-            labels.iloc[i] = 2
+            if primary_sig == 1:
+                gross_return = (upper_barrier - entry_price) / entry_price
+            else:
+                gross_return = (entry_price - lower_barrier) / entry_price
                 
+            labels.iloc[i] = 1 if gross_return > cost_pct else 0
+        else:
+            labels.iloc[i] = 0
+                 
     return labels
 
 def generate_and_store_labels():
@@ -87,7 +108,14 @@ def generate_and_store_labels():
         for asset in assets:
             print(f"\n[PROCESS] Generating Symmetrical Labels for {asset} ({config.TIMEFRAME})...")
             
-            query = f"SELECT timestamp, open, high, low, close FROM {table_name_market} WHERE asset = '{asset}' ORDER BY timestamp ASC"
+            # Join with feature_store to retrieve primary_signal
+            query = f"""
+            SELECT m.timestamp, m.open, m.high, m.low, m.close, f.primary_signal
+            FROM {table_name_market} m
+            JOIN {table_name_features} f ON m.timestamp = f.timestamp AND m.asset = f.asset
+            WHERE m.asset = '{asset}'
+            ORDER BY m.timestamp ASC
+            """
             df = pd.read_sql(query, connection)
             if len(df) < 100:
                 print("  [SKIP] Not enough candles to label.")
@@ -103,9 +131,9 @@ def generate_and_store_labels():
             
             print("  --- Label Distribution ---")
             label_counts = shotgun_labels.value_counts().sort_index()
-            print(f"    Class 0 (SHORT): {label_counts.get(0, 0)}")
-            print(f"    Class 1 (LONG):  {label_counts.get(1, 0)}")
-            print(f"    Class 2 (HOLD):  {label_counts.get(2, 0)}")
+            print(f"    Class 0 (FAILURE): {label_counts.get(0, 0)}")
+            print(f"    Class 1 (SUCCESS): {label_counts.get(1, 0)}")
+            print(f"    Class -1 (IGNORE): {label_counts.get(-1, 0)}")
             print("  --------------------------")
 
             labeled_df = df.dropna(subset=['target_label']).copy()

@@ -4,6 +4,9 @@ import joblib
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import classification_report
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.model_selection import cross_val_predict
+from sklearn.isotonic import IsotonicRegression
 import xgboost as xgb
 import warnings
 import config
@@ -12,6 +15,56 @@ import config
 from database_config import get_db_engine
 
 warnings.filterwarnings("ignore", category=UserWarning)
+
+class ManualCalibratedClassifier(BaseEstimator, ClassifierMixin):
+    def __init__(self, estimator, cv=3):
+        self.estimator = estimator
+        self.cv = cv
+        
+    def fit(self, X, y, sample_weight=None):
+        self.classes_ = np.unique(y)
+        n_classes = len(self.classes_)
+        
+        fit_params = {}
+        if sample_weight is not None:
+            fit_params['sample_weight'] = sample_weight
+            
+        this_estimator = clone(self.estimator)
+        oof_probs = cross_val_predict(
+            this_estimator, X, y, cv=self.cv,
+            method='predict_proba', params=fit_params
+        )
+        
+        self.estimator_ = clone(self.estimator)
+        if sample_weight is not None:
+            self.estimator_.fit(X, y, sample_weight=sample_weight)
+        else:
+            self.estimator_.fit(X, y)
+            
+        self.calibrators_ = []
+        for i, c in enumerate(self.classes_):
+            y_bin = (y == c).astype(int)
+            calibrator = IsotonicRegression(out_of_bounds='clip')
+            calibrator.fit(oof_probs[:, i], y_bin)
+            self.calibrators_.append(calibrator)
+            
+        return self
+        
+    def predict_proba(self, X):
+        raw_probs = self.estimator_.predict_proba(X)
+        calibrated_probs = np.zeros_like(raw_probs)
+        
+        for i, calibrator in enumerate(self.calibrators_):
+            calibrated_probs[:, i] = calibrator.predict(raw_probs[:, i])
+            
+        row_sums = calibrated_probs.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        calibrated_probs = calibrated_probs / row_sums
+        return calibrated_probs
+        
+    def predict(self, X):
+        probs = self.predict_proba(X)
+        return self.classes_[np.argmax(probs, axis=1)]
 
 def multiclass_brier_score(y_true, y_prob):
     """
@@ -53,14 +106,15 @@ class QuantValidationSuiteV8:
         
         query = f"SELECT * FROM {self.table_name} WHERE asset = '{asset}'"
         df = pd.read_sql(query, self.engine)
-        df.dropna(subset=['target_label'], inplace=True)
-        df = df[df['target_label'] != 2].copy()
+        
+        # Load only triggered binary signals rows
+        df = df[df['target_label'].isin([0, 1])].copy()
         df['target_label'] = df['target_label'].astype(int)
 
-        # Require a solid lookback context (especially on 15M where we have thousands of records)
-        min_samples = 2000 if config.TIMEFRAME == "15m" else 500
+        # Meta-labeling datasets are smaller since they only look at triggers. Adjust sample count checks.
+        min_samples = 200 if config.TIMEFRAME == "15m" else 50
         if len(df) < min_samples: 
-            print(f"  -> Not enough data for robust walk-forward analysis. Have {len(df)}, need {min_samples}.")
+            print(f"  -> Not enough triggered sample data for robust walk-forward analysis. Have {len(df)}, need {min_samples}.")
             print("-" * 50)
             return
 
@@ -76,7 +130,7 @@ class QuantValidationSuiteV8:
             X_train, X_test = X.iloc[train_index], X.iloc[test_index]
             y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
-            if len(X_train) < 300 or len(X_test) < 50:
+            if len(X_train) < 30 or len(X_test) < 10:
                 print(f"  --- Fold {i+1}/5: Skipping due to insufficient fold samples ---")
                 continue
             
@@ -100,7 +154,7 @@ class QuantValidationSuiteV8:
             y_pred = model.predict(X_test)
             y_prob = model.predict_proba(X_test)
             
-            report = classification_report(y_test, y_pred, labels=[0, 1], target_names=['SHORT', 'LONG'], output_dict=True, zero_division=0)
+            report = classification_report(y_test, y_pred, labels=[0, 1], target_names=['FAILURE', 'SUCCESS'], output_dict=True, zero_division=0)
             all_reports.append(report)
             
             brier = multiclass_brier_score(y_test.values, y_prob)
@@ -108,18 +162,18 @@ class QuantValidationSuiteV8:
 
             print(f"  --- Fold {i+1}/5 ---")
             print(f"    Brier Score: {brier:.4f}")
-            print(f"    Precision (LONG): {report['LONG']['precision']:.2f} | Support: {report['LONG']['support']}")
-            print(f"    Precision (SHORT): {report['SHORT']['precision']:.2f} | Support: {report['SHORT']['support']}")
+            print(f"    Precision (SUCCESS): {report['SUCCESS']['precision']:.2f} | Support: {report['SUCCESS']['support']}")
+            print(f"    Precision (FAILURE): {report['FAILURE']['precision']:.2f} | Support: {report['FAILURE']['support']}")
 
         if all_reports:
-            avg_long_precision = np.mean([r['LONG']['precision'] for r in all_reports])
-            avg_short_precision = np.mean([r['SHORT']['precision'] for r in all_reports])
+            avg_success_precision = np.mean([r['SUCCESS']['precision'] for r in all_reports])
+            avg_failure_precision = np.mean([r['FAILURE']['precision'] for r in all_reports])
             avg_brier = np.mean(all_briers)
             
             print("\n  -> Average Walk-Forward Results:")
-            print(f"     - Avg Multiclass Brier Score: {avg_brier:.4f}")
-            print(f"     - Avg Precision (LONG): {avg_long_precision:.2f}")
-            print(f"     - Avg Precision (SHORT): {avg_short_precision:.2f}")
+            print(f"     - Avg Binary Brier Score: {avg_brier:.4f}")
+            print(f"     - Avg Precision (SUCCESS): {avg_success_precision:.2f}")
+            print(f"     - Avg Precision (FAILURE): {avg_failure_precision:.2f}")
         else:
             print("  -> Could not complete any walk-forward splits.")
         print("-" * 50)
