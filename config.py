@@ -37,6 +37,8 @@ TARGET_ASSETS = [
 TIMEZONE = "Europe/Stockholm"
 ESTIMATED_FEE_PCT = 0.0008
 RISK_PER_TRADE_USD = 5.0
+MAX_ACTIVE_TRADES = 3
+MAX_POSITION_SIZE_USD = 500.0
 
 # 🟢 V8.5 Upgrade: Direction-specific confidence thresholds
 LONG_CONFIDENCE_THRESHOLD = 65.0

@@ -726,6 +726,12 @@ class AlphaQuantV8_2:
                                     getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(asset, base_threshold))
                                     
                         if win_prob >= threshold:
+                            # Enforce maximum concurrent active trades limit
+                            max_allowed = getattr(config, 'MAX_ACTIVE_TRADES', 3)
+                            if len(active_trades) >= max_allowed:
+                                print(f"[REJECT] {asset} signal rejected. Maximum active trades limit reached ({len(active_trades)}/{max_allowed}).")
+                                continue
+
                             # 🟢 V8.5 Multi-Timeframe Veto Power Check
                             if getattr(config, 'MULTITIMEFRAME_VETO_ENABLED', True):
                                 close_val = last_closed['close']
@@ -793,6 +799,11 @@ class AlphaQuantV8_2:
                             target_risk = min(target_risk, base_risk * 2.0)
                             
                             position_size = (target_risk / abs(entry_price - sl)) * entry_price
+                            # Cap position size to prevent insufficient margin on small wallets
+                            max_pos = getattr(config, 'MAX_POSITION_SIZE_USD', 500.0)
+                            if position_size > max_pos:
+                                print(f"[SYSTEM] Capping position size for {asset} from ${position_size:.2f} to ${max_pos:.2f} to fit wallet margin requirements.")
+                                position_size = max_pos
                             
                             # 🟢 V8.5 Funnel: Increment executed counter
                             signal_funnel["executed"] += 1
