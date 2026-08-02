@@ -764,6 +764,31 @@ class AlphaQuantV8_2:
                         threshold = getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(f"{asset}_{direction}", 
                                     getattr(config, 'ASSET_SPECIFIC_THRESHOLDS', {}).get(asset, base_threshold))
                                     
+                        # 🟢 V8.6 Market Regime Adaptive Threshold Adjustment (Enhancement #3)
+                        last_chop = float(last_closed['chop_index'])
+                        last_adx = float(last_closed['adx_14'])
+                        trigger_cat = int(last_closed['trigger_category'])
+                        
+                        regime = "NORMAL"
+                        if last_chop > 55.0 or last_adx < 20.0:
+                            regime = "CHOPPY"
+                        elif last_chop < 45.0 and last_adx > 25.0:
+                            regime = "TRENDING"
+                            
+                        regime_adjustment = 0.0
+                        if regime == "CHOPPY":
+                            if trigger_cat in [1, 2]: # TREND or BREAKOUT
+                                regime_adjustment = 5.0 # Raise threshold by 5% to avoid whipsaws in chop
+                        elif regime == "TRENDING":
+                            if trigger_cat in [1, 2]: # TREND or BREAKOUT
+                                regime_adjustment = -2.5 # Lower threshold by 2.5% to capture strong trend breakouts
+                            elif trigger_cat == 3: # REVERSION
+                                regime_adjustment = 5.0 # Raise threshold by 5% as reversion is risky in strong trend
+                                
+                        threshold += regime_adjustment
+                        if regime_adjustment != 0.0:
+                            print(f"  [REGIME ADJUST] {asset} in {regime} regime. Trigger Cat: {trigger_cat}. Adjusted threshold: {threshold:.2f}% (adjustment: {regime_adjustment:+.1f}%)")
+                                    
                         if win_prob >= threshold:
                             # Enforce maximum concurrent active trades limit
                             max_allowed = getattr(config, 'MAX_ACTIVE_TRADES', 3)
@@ -885,7 +910,9 @@ class AlphaQuantV8_2:
                                     "bb_width": float(last_closed['bb_width']),
                                     "rsi_14": float(last_closed['rsi_14']),
                                     "macd_hist": float(last_closed['macd_hist']),
-                                    "supertrend_direction": float(last_closed['supertrend_direction'])
+                                    "supertrend_direction": float(last_closed['supertrend_direction']),
+                                    "chop_index": float(last_closed['chop_index']),
+                                    "trigger_category": int(last_closed['trigger_category'])
                                 }
                             })
                             asset_locks[asset] = True

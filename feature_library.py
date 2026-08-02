@@ -75,6 +75,17 @@ def calculate_supertrend(df, period=10, multiplier=3):
             
     return pd.Series(direction, index=df.index, dtype=float)
 
+def calculate_choppiness_index(df, period=14):
+    """Calculates Choppiness Index (0-100)."""
+    tr = np.maximum(df['high'] - df['low'], 
+                    np.maximum(np.abs(df['high'] - df['close'].shift()), 
+                               np.abs(df['low'] - df['close'].shift())))
+    atr_sum = tr.rolling(window=period).sum()
+    high_max = df['high'].rolling(window=period).max()
+    low_min = df['low'].rolling(window=period).min()
+    range_hl = np.maximum(high_max - low_min, 1e-8)
+    return 100 * np.log10(atr_sum / range_hl) / np.log10(period)
+
 def calculate_features_for_shotgun(df):
     """
     Calculates all price-derived features for the Shotgun architecture.
@@ -114,6 +125,7 @@ def calculate_features_for_shotgun(df):
     features['rsi_14'] = calculate_rsi(features['close'], 14)
     features['macd_hist'] = calculate_macd(features['close'], 12, 26, 9)
     features['supertrend_direction'] = calculate_supertrend(features, 10, 3)
+    features['chop_index'] = calculate_choppiness_index(features, 14)
 
     # Volume Z-score
     vol_period = 120 if config.TIMEFRAME == "15m" else 30
@@ -145,6 +157,7 @@ def calculate_features_for_shotgun(df):
     
     # Combine signals: 1 for LONG, 0 for SHORT, -1 for NONE
     primary_signal = np.full(len(features), -1, dtype=int)
+    trigger_category = np.full(len(features), 0, dtype=int)
     
     # Apply conditions
     long_conditions = (trend_long == 1) | (breakout_long == 1) | (reversion_long == 1)
@@ -153,6 +166,18 @@ def calculate_features_for_shotgun(df):
     primary_signal[long_conditions] = 1
     primary_signal[short_conditions] = 0
     
+    # Assign categories
+    # 1: TREND
+    primary_trend = (trend_long == 1) | (trend_short == 1)
+    trigger_category[primary_trend] = 1
+    # 2: BREAKOUT
+    primary_breakout = (breakout_long == 1) | (breakout_short == 1)
+    trigger_category[primary_breakout] = 2
+    # 3: REVERSION
+    primary_reversion = (reversion_long == 1) | (reversion_short == 1)
+    trigger_category[primary_reversion] = 3
+    
     features['primary_signal'] = primary_signal
+    features['trigger_category'] = trigger_category
     
     return features
