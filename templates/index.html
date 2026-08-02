@@ -2563,9 +2563,11 @@
                     fetchDashboardData();
                 } else {
                     alert("Failed to force close position: " + data.message);
+                    fetchDashboardData();
                 }
             } catch (e) {
                 alert("Failed to force close position: " + e.message);
+                fetchDashboardData();
             } finally {
                 closeForceCloseModal();
             }
