@@ -202,7 +202,7 @@ def save_state():
         last_state_mtime = os.path.getmtime(config.STATE_FILE)
     except Exception:
         last_state_mtime = 0
-    print("[INFO] Bot state saved.")
+    # print("[INFO] Bot state saved.")
 
 last_state_load_time = 0
 last_state_mtime = 0
@@ -233,7 +233,7 @@ def load_state(force=False):
         active_trades = state.get("active_trades", [])
         signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
         trade_mode = state.get("trade_mode", "BOTH")
-        print("[SUCCESS] Bot state loaded from file (synchronized).")
+        # print("[SUCCESS] Bot state loaded from file (synchronized).")
     except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
     except Exception as e: print(f"[WARNING] Failed to load state file: {e}")
 
