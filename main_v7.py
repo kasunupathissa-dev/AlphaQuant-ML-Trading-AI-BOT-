@@ -803,6 +803,13 @@ class AlphaQuantV8_2:
                             max_allowed = getattr(config, 'MAX_ACTIVE_TRADES', 3)
                             if len(active_trades) >= max_allowed:
                                 print(f"[REJECT] {asset} signal rejected. Maximum active trades limit reached ({len(active_trades)}/{max_allowed}).")
+                                msg = (
+                                    f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (MAX TRADES)*\n"
+                                    f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                    f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
+                                    f"• *Reason*: Maximum active trades limit reached ({len(active_trades)}/{max_allowed})."
+                                )
+                                send_telegram_message(msg)
                                 continue
 
                             # 🟢 V8.5 Multi-Timeframe Veto Power Check
@@ -813,9 +820,23 @@ class AlphaQuantV8_2:
                                 
                                 if direction == "LONG" and not (close_val > ema_fast and ema_fast > ema_slow):
                                     print(f"[REJECT] {asset} LONG signal rejected. Higher-Timeframe trend is not bullish (Close: {close_val:.2f}, Fast EMA: {ema_fast:.2f}, Slow EMA: {ema_slow:.2f}).")
+                                    msg = (
+                                        f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (HTF TREND VETO)*\n"
+                                        f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                        f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
+                                        f"• *Reason*: HTF trend not bullish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
+                                    )
+                                    send_telegram_message(msg)
                                     continue
                                 elif direction == "SHORT" and not (close_val < ema_fast and ema_fast < ema_slow):
                                     print(f"[REJECT] {asset} SHORT signal rejected. Higher-Timeframe trend is not bearish (Close: {close_val:.2f}, Fast EMA: {ema_fast:.2f}, Slow EMA: {ema_slow:.2f}).")
+                                    msg = (
+                                        f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (HTF TREND VETO)*\n"
+                                        f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                        f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
+                                        f"• *Reason*: HTF trend not bearish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
+                                    )
+                                    send_telegram_message(msg)
                                     continue
                                     
                             # 🟢 V8.4 Chop Filter Check: Prevent entering trades in choppy/sideways markets
@@ -825,6 +846,13 @@ class AlphaQuantV8_2:
                             
                             if last_chop > 61.8 and last_adx < 20:
                                 print(f"[REJECT] {asset} signal rejected. Market is in Chop/Sideways regime (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20).")
+                                msg = (
+                                    f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (EXTREME CHOP)*\n"
+                                    f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                    f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
+                                    f"• *Reason*: Market in Extreme Chop/Sideways (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20)."
+                                )
+                                send_telegram_message(msg)
                                 # 🟢 V8.5 Funnel: Increment regime rejection counter
                                 signal_funnel["rejected_regime"] += 1
                                 save_state()
@@ -836,6 +864,13 @@ class AlphaQuantV8_2:
                                 active_correlated = [t for t in active_trades if t['asset'] == correlated_pair and t['direction'] == direction]
                                 if active_correlated:
                                     print(f"[REJECT] {asset} {direction} signal rejected. Correlated asset {correlated_pair} already has an active {direction} trade.")
+                                    msg = (
+                                        f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (CORRELATION)*\n"
+                                        f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                        f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
+                                        f"• *Reason*: Correlated asset {correlated_pair} already has an active {direction} trade."
+                                    )
+                                    send_telegram_message(msg)
                                     continue
                             # 🟢 V8.3 Upgrade: Fetch actual live price via REST to guarantee accuracy
                             # and prevent stale entry prices or inverted SL/TP parameters.
@@ -855,6 +890,13 @@ class AlphaQuantV8_2:
                             deviation = abs(entry_price - trigger_price) / trigger_price
                             if deviation > getattr(config, 'MAX_PRICE_DEVIATION_PCT', 0.005):
                                 print(f"[REJECT] {asset} live price ${entry_price:,.4f} is too far from trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%). Rejecting trade entry.")
+                                msg = (
+                                    f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (SLIPPAGE)*\n"
+                                    f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                    f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
+                                    f"• *Reason*: Live price ${entry_price:,.4f} deviates too far from trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%)."
+                                )
+                                send_telegram_message(msg)
                                 continue
                                 
                             atr_val = last_closed['atr']
@@ -947,6 +989,15 @@ class AlphaQuantV8_2:
                             # 🟢 V8.5 Funnel: Increment threshold rejection counter
                             signal_funnel["rejected_threshold"] += 1
                             save_state()
+                            msg = (
+                                f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (LOW PROBABILITY)*\n"
+                                f"• *Asset*: {asset} | *Direction*: {direction}\n"
+                                f"• *AI Win Prob*: `{win_prob:.2f}%`\n"
+                                f"• *Required Threshold*: `{threshold:.2f}%`\n"
+                                f"• *Regime*: `{regime}` | *Trigger Cat*: `{trigger_cat}`\n"
+                                f"• *Reason*: Under minimum ML confidence threshold."
+                            )
+                            send_telegram_message(msg)
                             
                     except Exception as e:
                         print(f"[ERROR] Inference failed for {asset}: {e}", file=sys.stderr)
