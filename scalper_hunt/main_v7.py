@@ -16,7 +16,7 @@ import socket
 # ⚙️ Singleton Process Lock (Prevents duplicate instances of main_v7.py)
 lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
-    lock_socket.bind(('127.0.0.1', 9999))
+    lock_socket.bind(('127.0.0.1', 9998))
 except socket.error:
     print("[FATAL] Another instance of main_v7.py is already running. Exiting to prevent duplicate trades.")
     sys.exit(1)
@@ -27,7 +27,7 @@ except ImportError:
     ZoneInfo = None
 
 # 🟢 V8.2 Upgrade: JSON Serialization Fix
-import config_scalper as config 
+import config_scalper as config_scalper as config 
 from database_config import get_db_engine
 from feature_library import calculate_features_for_shotgun, calculate_zscore
 
