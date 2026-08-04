@@ -948,9 +948,10 @@ class AlphaQuantSCALPER_HUNT:
                             elif trigger_cat == 3: # REVERSION
                                 regime_adjustment = 5.0 # Raise threshold by 5% as reversion is risky in strong trend
                                 
-                        threshold += regime_adjustment
-                        if regime_adjustment != 0.0:
-                            print(f"  [REGIME ADJUST] {asset} in {regime} regime. Trigger Cat: {trigger_cat}. Adjusted threshold: {threshold:.2f}% (adjustment: {regime_adjustment:+.1f}%)")
+                        if getattr(config, 'REGIME_ADAPTIVE_THRESHOLD_ENABLED', True):
+                            threshold += regime_adjustment
+                            if regime_adjustment != 0.0:
+                                print(f"  [REGIME ADJUST] {asset} in {regime} regime. Trigger Cat: {trigger_cat}. Adjusted threshold: {threshold:.2f}% (adjustment: {regime_adjustment:+.1f}%)")
                                     
                         if win_prob >= threshold:
                             # Enforce maximum concurrent active trades limit

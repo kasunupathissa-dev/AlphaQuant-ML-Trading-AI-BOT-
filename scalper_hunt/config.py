@@ -58,3 +58,6 @@ NEWS_BLOCKOUT_WINDOW_MINUTES = 60
 
 # 🚀 Veto Disabled for active pullback/counter-trend scalping
 MULTITIMEFRAME_VETO_ENABLED = False
+
+# Enable/Disable market regime adaptive confidence threshold adjustments
+REGIME_ADAPTIVE_THRESHOLD_ENABLED = False

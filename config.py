@@ -60,3 +60,6 @@ NEWS_BLOCKOUT_WINDOW_MINUTES = 60
 
 # Enable/Disable 1H trend alignment check for 15M signals
 MULTITIMEFRAME_VETO_ENABLED = True
+
+# Enable/Disable market regime adaptive confidence threshold adjustments
+REGIME_ADAPTIVE_THRESHOLD_ENABLED = True
