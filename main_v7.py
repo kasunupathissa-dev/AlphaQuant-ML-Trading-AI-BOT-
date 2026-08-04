@@ -100,6 +100,8 @@ asset_recent_results = {asset: [] for asset in config.TARGET_ASSETS}
 asset_penalty_box = {} 
 signal_funnel = {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0}
 trade_mode = "BOTH"
+rejected_signal_tracker = []
+last_audit_time = time.time()
 
 def get_local_time():
     """Returns the current datetime in the Stockholm timezone (or fallback UTC+2)."""
@@ -192,7 +194,9 @@ def save_state():
         "active_trades": active_trades,
         "signal_funnel": signal_funnel,
         "live_prices": live_prices,
-        "trade_mode": trade_mode
+        "trade_mode": trade_mode,
+        "rejected_signal_tracker": rejected_signal_tracker,
+        "last_audit_time": last_audit_time
     })
     
     with open(config.STATE_FILE, 'w') as f:
@@ -208,7 +212,7 @@ last_state_load_time = 0
 last_state_mtime = 0
 
 def load_state(force=False):
-    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time, last_state_mtime
+    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time, last_state_mtime, rejected_signal_tracker, last_audit_time
     
     if not os.path.exists(config.STATE_FILE):
         return
@@ -233,6 +237,8 @@ def load_state(force=False):
         active_trades = state.get("active_trades", [])
         signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
         trade_mode = state.get("trade_mode", "BOTH")
+        rejected_signal_tracker = state.get("rejected_signal_tracker", [])
+        last_audit_time = state.get("last_audit_time", time.time())
         # print("[SUCCESS] Bot state loaded from file (synchronized).")
     except json.JSONDecodeError: print("[WARNING] Could not decode state file. Starting fresh.")
     except Exception as e: print(f"[WARNING] Failed to load state file: {e}")
@@ -363,6 +369,31 @@ def log_trade_to_csv(trade):
         if not file_exists: writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
         writer.writerow([get_local_time().strftime("%Y-%m-%d %H:%M:%S"), trade["asset"], trade["direction"], f"{trade['entry']:.4f}", f"{trade['tp']:.4f}", f"{trade['sl']:.4f}", trade["status"], f"{trade['ai_prob']:.2f}%", f"{trade['pnl']:.2f}", "SHOTGUN"])
     log_trade_features_to_csv(trade)
+
+def track_rejected_signal(asset, direction, win_prob, threshold, entry_price, atr_val, reason):
+    global rejected_signal_tracker
+    sl = entry_price - atr_val * config.ATR_STOP_LOSS_MULTIPLIER if direction == "LONG" else entry_price + atr_val * config.ATR_STOP_LOSS_MULTIPLIER
+    tp = entry_price + atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER if direction == "LONG" else entry_price - atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER
+    
+    # Check if this asset/direction is already pending in the tracker to avoid double-tracking
+    existing = [s for s in rejected_signal_tracker if s["asset"] == asset and s["direction"] == direction and s["status"] == "PENDING"]
+    if existing:
+        return
+        
+    rejected_signal_tracker.append({
+        "asset": asset,
+        "direction": direction,
+        "win_prob": win_prob,
+        "threshold": threshold,
+        "entry_price": entry_price,
+        "sl": sl,
+        "tp": tp,
+        "reason": reason,
+        "status": "PENDING",
+        "timestamp": time.time(),
+        "target_risk": config.RISK_PER_TRADE_USD
+    })
+    save_state()
 
 class AlphaQuantV8_2:
     def __init__(self):
@@ -665,12 +696,127 @@ class AlphaQuantV8_2:
         active_trades = updated_trades
         if trade_closed: save_state()
 
+    def audit_rejected_signals(self):
+        global rejected_signal_tracker
+        current_time = time.time()
+        for sig in rejected_signal_tracker:
+            if sig["status"] != "PENDING":
+                continue
+            
+            asset = sig["asset"]
+            price_key = f"{asset}:USDT"
+            current_price = live_prices.get(price_key)
+            if not current_price:
+                continue
+                
+            entry = sig["entry_price"]
+            tp = sig["tp"]
+            sl = sig["sl"]
+            direction = sig["direction"]
+            
+            hit_tp = False
+            hit_sl = False
+            
+            if direction == "LONG":
+                if current_price >= tp:
+                    hit_tp = True
+                elif current_price <= sl:
+                    hit_sl = True
+            else:
+                if current_price <= tp:
+                    hit_tp = True
+                elif current_price >= sl:
+                    hit_sl = True
+                    
+            if hit_tp:
+                sig["status"] = "WIN"
+                sig["close_price"] = current_price
+                sig["outcome_time"] = current_time
+                sig["pnl"] = sig["target_risk"] * (config.ATR_TAKE_PROFIT_MULTIPLIER / config.ATR_STOP_LOSS_MULTIPLIER)
+            elif hit_sl:
+                sig["status"] = "LOSS"
+                sig["close_price"] = current_price
+                sig["outcome_time"] = current_time
+                sig["pnl"] = -sig["target_risk"]
+            elif (current_time - sig["timestamp"]) >= 86400: # 24h timeout
+                sig["outcome_time"] = current_time
+                sig["close_price"] = current_price
+                if direction == "LONG":
+                    if current_price > entry:
+                        sig["status"] = "WIN"
+                        sig["pnl"] = sig["target_risk"] * 0.5
+                    else:
+                        sig["status"] = "LOSS"
+                        sig["pnl"] = -sig["target_risk"]
+                else:
+                    if current_price < entry:
+                        sig["status"] = "WIN"
+                        sig["pnl"] = sig["target_risk"] * 0.5
+                    else:
+                        sig["status"] = "LOSS"
+                        sig["pnl"] = -sig["target_risk"]
+        save_state()
+
+    def send_hourly_audit_summary(self):
+        global rejected_signal_tracker, last_audit_time
+        current_time = time.time()
+        
+        completed_sigs = [
+            sig for sig in rejected_signal_tracker 
+            if sig["status"] in ("WIN", "LOSS") 
+            and (current_time - sig.get("outcome_time", 0)) <= 3600
+        ]
+        
+        if not completed_sigs:
+            send_telegram_message("📊 *[AlphaQuant V8.2] Hourly Rejection Audit*\n• *Status*: Active\n• *Signals Audited in Last Hour*: `0`\n• *Capital Saved*: `$0.00` (Market flat, no exits).")
+            last_audit_time = current_time
+            rejected_signal_tracker = [sig for sig in rejected_signal_tracker if sig["status"] == "PENDING"]
+            save_state()
+            return
+            
+        wins = [s for s in completed_sigs if s["status"] == "WIN"]
+        losses = [s for s in completed_sigs if s["status"] == "LOSS"]
+        
+        total_wins_val = sum(s["pnl"] for s in wins)
+        total_losses_val = sum(s["pnl"] for s in losses)
+        net_hypothetical_pnl = total_wins_val + total_losses_val
+        
+        capital_saved = -net_hypothetical_pnl
+        
+        details = []
+        for s in completed_sigs:
+            direction_emoji = "🟢" if s["direction"] == "LONG" else "🔴"
+            details.append(
+                f"• {direction_emoji} *{s['asset']}* ({s['reason']}): "
+                f"AI `{s['win_prob']:.1f}%` | outcome: *{s['status']}* (Hypothetical: `{s['pnl']:+.2f}`)"
+            )
+            
+        details_str = "\n".join(details)
+        
+        msg = (
+            f"📊 *[AlphaQuant V8.2] Hourly Rejection Audit*\n"
+            f"• *Completed Audits*: `{len(completed_sigs)}` (Wins: `{len(wins)}` | Losses: `{len(losses)}`)\n"
+            f"• *Net Hypothetical P&L*: `{net_hypothetical_pnl:+.2f} USD`\n"
+            f"• *Capital Saved / Avoided*: *{capital_saved:+.2f} USD*\n\n"
+            f"*Audited Signals Details*:\n{details_str}"
+        )
+        send_telegram_message(msg)
+        
+        last_audit_time = current_time
+        rejected_signal_tracker = [sig for sig in rejected_signal_tracker if sig["status"] == "PENDING"]
+        save_state()
+
     async def ml_inference_loop(self):
         while self.running:
             try:
                 await asyncio.sleep(getattr(config, 'INFERENCE_INTERVAL_SECONDS', 3600)) 
                 if not self.running: break
                 
+                # Run Shadow Rejection Auditor
+                self.audit_rejected_signals()
+                if time.time() - last_audit_time >= 3600:
+                    self.send_hourly_audit_summary()
+                    
                 # --- Time-of-Day Performance Filter ---
                 local_time = get_local_time()
                 blocked_hours = getattr(config, 'BLOCKED_HOURS', [])
@@ -809,6 +955,7 @@ class AlphaQuantV8_2:
                                     f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                     f"• *Reason*: Maximum active trades limit reached ({len(active_trades)}/{max_allowed})."
                                 )
+                                track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "MAX_TRADES")
                                 send_telegram_message(msg)
                                 continue
 
@@ -826,6 +973,7 @@ class AlphaQuantV8_2:
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                         f"• *Reason*: HTF trend not bullish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
                                     )
+                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO")
                                     send_telegram_message(msg)
                                     continue
                                 elif direction == "SHORT" and not (close_val < ema_fast and ema_fast < ema_slow):
@@ -836,6 +984,7 @@ class AlphaQuantV8_2:
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                         f"• *Reason*: HTF trend not bearish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
                                     )
+                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO")
                                     send_telegram_message(msg)
                                     continue
                                     
@@ -852,6 +1001,7 @@ class AlphaQuantV8_2:
                                     f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                     f"• *Reason*: Market in Extreme Chop/Sideways (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20)."
                                 )
+                                track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "EXTREME_CHOP")
                                 send_telegram_message(msg)
                                 # 🟢 V8.5 Funnel: Increment regime rejection counter
                                 signal_funnel["rejected_regime"] += 1
@@ -870,6 +1020,7 @@ class AlphaQuantV8_2:
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                         f"• *Reason*: Correlated asset {correlated_pair} already has an active {direction} trade."
                                     )
+                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "CORRELATION")
                                     send_telegram_message(msg)
                                     continue
                             # 🟢 V8.3 Upgrade: Fetch actual live price via REST to guarantee accuracy
@@ -896,6 +1047,7 @@ class AlphaQuantV8_2:
                                     f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                     f"• *Reason*: Live price ${entry_price:,.4f} deviates too far from trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%)."
                                 )
+                                track_rejected_signal(asset, direction, win_prob, threshold, entry_price, last_closed['atr'], "SLIPPAGE")
                                 send_telegram_message(msg)
                                 continue
                                 
@@ -997,6 +1149,7 @@ class AlphaQuantV8_2:
                                 f"• *Regime*: `{regime}` | *Trigger Cat*: `{trigger_cat}`\n"
                                 f"• *Reason*: Under minimum ML confidence threshold."
                             )
+                            track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "LOW_PROB")
                             send_telegram_message(msg)
                             
                     except Exception as e:
