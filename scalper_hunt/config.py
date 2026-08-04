@@ -14,6 +14,18 @@ USE_TESTNET = True
 TIMEFRAME = "15m"  # 15M target
 INFERENCE_INTERVAL_SECONDS = 900  # 15 minutes (900s)
 
+# --- Indicator Settings (Auto-scaled) ---
+if TIMEFRAME == "15m":
+    EMA_FAST_PERIOD = 200            # Matches the temporal scale of 1H EMA-50 (~50 hours)
+    EMA_SLOW_PERIOD = 800            # Matches the temporal scale of 1H EMA-200 (~200 hours)
+    ATR_PERIOD = 56                  # Smooths out noise for the shorter timeframe
+    BARRIER_TIME_LIMIT_HOURS = 24    # Equivalent to 96 bars on 15M (lookahead horizon)
+else:
+    EMA_FAST_PERIOD = 50
+    EMA_SLOW_PERIOD = 200
+    ATR_PERIOD = 14
+    BARRIER_TIME_LIMIT_HOURS = 24
+
 # --- Target Assets ---
 TARGET_ASSETS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "NEAR/USDT", "1000PEPE/USDT", 
