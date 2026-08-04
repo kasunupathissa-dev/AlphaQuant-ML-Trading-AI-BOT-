@@ -83,8 +83,8 @@ def run_optimizer():
     thresholds = [50.0, 52.0, 54.0, 56.0, 58.0, 60.0, 62.0, 64.0, 66.0, 68.0, 70.0]
 
     print("\n==================================================")
-    # Target last 30 days of 15m data: 30 * 96 = 2880 candles
-    query_limit = 3500 
+    print("  ALPHAQUANT: WALKFOWARD THRESHOLD OPTIMIZATION   ")
+    print("==================================================")
 
     for asset in config.TARGET_ASSETS:
         brain_file = "/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/" + asset.replace("/", "_") + "_brain.pkl"
@@ -99,8 +99,12 @@ def run_optimizer():
             print(f"[ERROR] Failed to load brain for {asset}: {e}")
             continue
 
-        # Load raw price data (last 30 days)
-        query = f"SELECT * FROM {table_market} WHERE asset = '{asset}' ORDER BY timestamp DESC LIMIT {query_limit}"
+        # Load all available historical price data
+        query = f"""
+        SELECT * FROM {table_market} 
+        WHERE asset = '{asset}' 
+        ORDER BY timestamp DESC
+        """
         try:
             with engine.connect() as conn:
                 df = pd.read_sql(text(query), conn)
@@ -124,8 +128,9 @@ def run_optimizer():
             target_signal = 1 if direction == "LONG" else 0
             setups = df[df['primary_signal'] == target_signal]
             
-            if len(setups) < 5:
+            if len(setups) < 10:
                 print(f"[SKIP] {asset} {direction} has only {len(setups)} setups.")
+                optimal_overrides[f"{asset}_{direction}"] = 65.0 if direction == "LONG" else 60.0
                 continue
 
             best_thresh = 65.0 if direction == "LONG" else 60.0
@@ -151,7 +156,7 @@ def run_optimizer():
                         trades_pnl.append(pnl)
 
                 trade_count = len(trades_pnl)
-                if trade_count < 5: # Minimum trades count threshold
+                if trade_count < 10: # Minimum trades count threshold scaled for longer dataset
                     continue
 
                 wins = sum(1 for p in trades_pnl if p > 0)
