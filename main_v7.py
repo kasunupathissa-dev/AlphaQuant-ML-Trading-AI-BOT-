@@ -280,6 +280,8 @@ def log_backend_error(category, message):
 
 def send_telegram_message(msg):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
+    # Global replacement of underscores with hyphens to prevent Telegram Markdown 400 errors
+    msg = msg.replace("_", "-")
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         response = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
