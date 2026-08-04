@@ -31,6 +31,49 @@ import config
 from database_config import get_db_engine
 from feature_library import calculate_features_for_shotgun, calculate_zscore
 
+# Initialize global database engine for rejection logger
+global_db_engine = None
+try:
+    global_db_engine = get_db_engine()
+except Exception as e:
+    print(f"[WARNING] Database connection failed on init: {e}")
+
+# 🟢 V8.5 Calibration Class definition to support unpickling
+def log_signal_rejection(engine, asset, direction, win_prob, threshold, regime, reason):
+    """
+    Logs rejected signals to the database, falling back to a local CSV file if connection fails.
+    """
+    timestamp = int(time.time() * 1000)
+    try:
+        from sqlalchemy import text
+        query = """
+        INSERT INTO signal_rejection_history (timestamp, asset, direction, win_prob, threshold, regime, rejection_reason)
+        VALUES (:timestamp, :asset, :direction, :win_prob, :threshold, :regime, :reason)
+        """
+        with engine.connect() as connection:
+            connection.execute(text(query), {
+                "timestamp": timestamp,
+                "asset": asset,
+                "direction": direction,
+                "win_prob": float(win_prob),
+                "threshold": float(threshold),
+                "regime": regime,
+                "reason": reason
+            })
+            connection.commit()
+    except Exception as e:
+        print(f"[WARNING] Database rejection logging failed: {e}. Writing to CSV fallback.")
+        csv_file = "signal_rejections_fallback.csv"
+        try:
+            file_exists = os.path.exists(csv_file)
+            with open(csv_file, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(["timestamp", "asset", "direction", "win_prob", "threshold", "regime", "rejection_reason"])
+                writer.writerow([timestamp, asset, direction, win_prob, threshold, regime, reason])
+        except Exception as csv_err:
+            print(f"[ERROR] CSV fallback writing failed: {csv_err}")
+
 # 🟢 V8.5 Calibration Class definition to support unpickling
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.isotonic import IsotonicRegression
@@ -372,7 +415,7 @@ def log_trade_to_csv(trade):
         writer.writerow([get_local_time().strftime("%Y-%m-%d %H:%M:%S"), trade["asset"], trade["direction"], f"{trade['entry']:.4f}", f"{trade['tp']:.4f}", f"{trade['sl']:.4f}", trade["status"], f"{trade['ai_prob']:.2f}%", f"{trade['pnl']:.2f}", "SHOTGUN"])
     log_trade_features_to_csv(trade)
 
-def track_rejected_signal(asset, direction, win_prob, threshold, entry_price, atr_val, reason):
+def track_rejected_signal(asset, direction, win_prob, threshold, entry_price, atr_val, reason, regime="NORMAL"):
     global rejected_signal_tracker
     sl = entry_price - atr_val * config.ATR_STOP_LOSS_MULTIPLIER if direction == "LONG" else entry_price + atr_val * config.ATR_STOP_LOSS_MULTIPLIER
     tp = entry_price + atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER if direction == "LONG" else entry_price - atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER
@@ -396,6 +439,9 @@ def track_rejected_signal(asset, direction, win_prob, threshold, entry_price, at
         "target_risk": config.RISK_PER_TRADE_USD
     })
     save_state()
+    
+    # 🟢 Write rejection metadata to SQL Database / CSV fallback
+    log_signal_rejection(global_db_engine, asset, direction, win_prob, threshold, regime, reason)
 
 class AlphaQuantSCALPER_HUNT:
     def __init__(self):
@@ -406,6 +452,19 @@ class AlphaQuantSCALPER_HUNT:
         if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: print("[WARNING] Telegram secrets not set.")
 
         load_state()
+
+        # Load optimal thresholds overrides if available
+        opt_file = "optimal_thresholds.json"
+        if os.path.exists(opt_file):
+            try:
+                with open(opt_file, 'r') as f:
+                    opt_thresh = json.load(f)
+                if not hasattr(config, 'ASSET_SPECIFIC_THRESHOLDS'):
+                    config.ASSET_SPECIFIC_THRESHOLDS = {}
+                config.ASSET_SPECIFIC_THRESHOLDS.update(opt_thresh)
+                print(f"[INFO] Loaded optimal threshold overrides from {opt_file}: {opt_thresh}")
+            except Exception as e:
+                print(f"[WARNING] Failed to load optimal thresholds file: {e}")
 
         for asset in config.TARGET_ASSETS:
             safe_filename = asset.replace("/", "_") + "_brain.pkl"
@@ -964,7 +1023,7 @@ class AlphaQuantSCALPER_HUNT:
                                     f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                     f"• *Reason*: Maximum active trades limit reached ({len(active_trades)}/{max_allowed})."
                                 )
-                                track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "MAX_TRADES")
+                                track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "MAX_TRADES", regime)
                                 send_telegram_message(msg)
                                 continue
 
@@ -982,7 +1041,7 @@ class AlphaQuantSCALPER_HUNT:
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                         f"• *Reason*: HTF trend not bullish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
                                     )
-                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO")
+                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO", regime)
                                     send_telegram_message(msg)
                                     continue
                                 elif direction == "SHORT" and not (close_val < ema_fast and ema_fast < ema_slow):
@@ -993,7 +1052,7 @@ class AlphaQuantSCALPER_HUNT:
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                         f"• *Reason*: HTF trend not bearish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
                                     )
-                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO")
+                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO", regime)
                                     send_telegram_message(msg)
                                     continue
                                     
@@ -1010,7 +1069,7 @@ class AlphaQuantSCALPER_HUNT:
                                     f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                     f"• *Reason*: Market in Extreme Chop/Sideways (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20)."
                                 )
-                                track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "EXTREME_CHOP")
+                                track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "EXTREME_CHOP", regime)
                                 send_telegram_message(msg)
                                 # 🟢 V8.5 Funnel: Increment regime rejection counter
                                 signal_funnel["rejected_regime"] += 1
@@ -1029,7 +1088,7 @@ class AlphaQuantSCALPER_HUNT:
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                         f"• *Reason*: Correlated asset {correlated_pair} already has an active {direction} trade."
                                     )
-                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "CORRELATION")
+                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "CORRELATION", regime)
                                     send_telegram_message(msg)
                                     continue
                             # 🟢 V8.3 Upgrade: Fetch actual live price via REST to guarantee accuracy
@@ -1056,7 +1115,7 @@ class AlphaQuantSCALPER_HUNT:
                                     f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
                                     f"• *Reason*: Live price ${entry_price:,.4f} deviates too far from trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%)."
                                 )
-                                track_rejected_signal(asset, direction, win_prob, threshold, entry_price, last_closed['atr'], "SLIPPAGE")
+                                track_rejected_signal(asset, direction, win_prob, threshold, entry_price, last_closed['atr'], "SLIPPAGE", regime)
                                 send_telegram_message(msg)
                                 continue
                                 
@@ -1158,7 +1217,7 @@ class AlphaQuantSCALPER_HUNT:
                                 f"• *Regime*: `{regime}` | *Trigger Cat*: `{trigger_cat}`\n"
                                 f"• *Reason*: Under minimum ML confidence threshold."
                             )
-                            track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "LOW_PROB")
+                            track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "LOW_PROB", regime)
                             send_telegram_message(msg)
                             
                     except Exception as e:

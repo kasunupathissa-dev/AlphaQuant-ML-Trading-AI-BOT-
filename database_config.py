@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 # ==================================================
 # ALPHAQUANT V6.5: SECURE DATABASE CONFIGURATION
@@ -24,6 +24,20 @@ def get_db_engine():
             engine = create_engine(connection_string)
             with engine.connect() as connection:
                 print("[SUCCESS] Connected to MySQL database.")
+                create_table_query = """
+                CREATE TABLE IF NOT EXISTS signal_rejection_history (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    timestamp BIGINT,
+                    asset VARCHAR(20),
+                    direction VARCHAR(10),
+                    win_prob DOUBLE,
+                    threshold DOUBLE,
+                    regime VARCHAR(20),
+                    rejection_reason VARCHAR(50)
+                )
+                """
+                connection.execute(text(create_table_query))
+                connection.commit()
             return engine
         except Exception as e:
             print(f"[FATAL] Could not connect to MySQL database: {e}")
@@ -31,4 +45,20 @@ def get_db_engine():
             exit()
     else:
         print("[INFO] Using local SQLite database.")
-        return create_engine("sqlite:///alphaquant_ml_v4.db")
+        engine = create_engine("sqlite:///alphaquant_ml_v4.db")
+        with engine.connect() as connection:
+            create_table_query = """
+            CREATE TABLE IF NOT EXISTS signal_rejection_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp BIGINT,
+                asset VARCHAR(20),
+                direction VARCHAR(10),
+                win_prob DOUBLE,
+                threshold DOUBLE,
+                regime VARCHAR(20),
+                rejection_reason VARCHAR(50)
+            )
+            """
+            connection.execute(text(create_table_query))
+            connection.commit()
+        return engine

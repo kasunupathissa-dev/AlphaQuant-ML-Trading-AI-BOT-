@@ -644,6 +644,7 @@
             <button id="nav-calibration" class="nav-btn" onclick="switchToView('calibration')">🧠 Model Health</button>
             <button id="nav-config" class="nav-btn" onclick="switchToView('config')">⚙️ Configuration</button>
             <button id="nav-penalty" class="nav-btn" onclick="switchToView('penalty')">🚫 Penalty Box</button>
+            <button id="nav-rejections" class="nav-btn" onclick="switchToView('rejections')">⚠️ Rejections</button>
         </div>
         <div class="header-stats">
             <div class="header-stat-item">
@@ -1391,6 +1392,49 @@
         </div>
     </div>
 
+    <!-- --- Signal Rejections View --- -->
+    <div id="rejections-view" style="display: none;">
+        <!-- Top bar -->
+        <div class="drilldown-header">
+            <button class="action-btn" onclick="switchToView('dashboard')" style="font-weight: bold;">← BACK TO DASHBOARD</button>
+            <h1 style="font-size: 18px; font-weight: 800; text-transform: uppercase;">⚠️ SIGNAL REJECTIONS LOG</h1>
+            <span id="rejections-active-count" style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">🔄 0 rejections loaded</span>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Pie Chart Breakdown -->
+            <div class="panel span-4">
+                <h3>📊 REJECTION REASON BREAKDOWN</h3>
+                <div class="chart-wrapper" style="height: 250px; position: relative;">
+                    <canvas id="rejectionsPieChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Detailed Table Feed -->
+            <div class="panel span-8">
+                <h3>🔄 DETAILED REJECTION FEED</h3>
+                <div class="table-responsive">
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Time</th>
+                                <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Asset</th>
+                                <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Dir</th>
+                                <th style="text-align: right; padding: 10px 12px; color: var(--text-secondary);">AI Prob</th>
+                                <th style="text-align: right; padding: 10px 12px; color: var(--text-secondary);">Threshold</th>
+                                <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Regime</th>
+                                <th style="text-align: left; padding: 10px 12px; color: var(--text-secondary);">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rejections-table-body">
+                            <!-- Loaded dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- --- Javascript Code --- -->
     <script>
         let pnlChart = null;
@@ -1458,6 +1502,7 @@
             document.getElementById('calibration-view').style.display = 'none';
             document.getElementById('config-view').style.display = 'none';
             document.getElementById('penalty-view').style.display = 'none';
+            document.getElementById('rejections-view').style.display = 'none';
             
             // Remove active class from all header nav buttons
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
@@ -1482,6 +1527,11 @@
                 const activeBtn = document.getElementById('nav-penalty');
                 if (activeBtn) activeBtn.classList.add('active');
                 loadPenaltyBoxPanelData();
+            } else if (viewName === 'rejections') {
+                document.getElementById('rejections-view').style.display = 'block';
+                const activeBtn = document.getElementById('nav-rejections');
+                if (activeBtn) activeBtn.classList.add('active');
+                loadRejectionsLogData();
             }
         }
 
@@ -2933,6 +2983,109 @@
                     }
                 }
             });
+        }
+
+        let rejectionsPieChart = null;
+
+        async function loadRejectionsLogData() {
+            try {
+                const res = await fetch(`/api/rejections?bot=${currentBot}`);
+                const data = await res.json();
+                
+                document.getElementById('rejections-active-count').innerText = `🔄 ${data.length} rejections loaded`;
+                
+                const tbody = document.getElementById('rejections-table-body');
+                tbody.innerHTML = '';
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-secondary);">No signal rejections logged. Bot is running clean.</td></tr>`;
+                    if (rejectionsPieChart) {
+                        rejectionsPieChart.destroy();
+                        rejectionsPieChart = null;
+                    }
+                    return;
+                }
+                
+                // Count frequencies for chart
+                const counts = {
+                    "LOW_PROB": 0,
+                    "TREND_VETO": 0,
+                    "EXTREME_CHOP": 0,
+                    "CORRELATION": 0,
+                    "SLIPPAGE": 0,
+                    "MAX_TRADES": 0
+                };
+                
+                data.forEach(item => {
+                    const timeStr = format_timestamp_stockholm(item.timestamp / 1000);
+                    const row = document.createElement('tr');
+                    
+                    const reason = item.rejection_reason || item.reason || "UNKNOWN";
+                    if (reason in counts) {
+                        counts[reason]++;
+                    } else {
+                        counts[reason] = (counts[reason] || 0) + 1;
+                    }
+                    
+                    row.innerHTML = `
+                        <td style="padding: 10px 12px; font-family: var(--font-mono); font-size: 12px;">${timeStr}</td>
+                        <td style="padding: 10px 12px; font-weight: bold;">${item.asset}</td>
+                        <td style="padding: 10px 12px;"><span class="badge ${item.direction === 'LONG' ? 'badge-win' : 'badge-loss'}">${item.direction}</span></td>
+                        <td style="padding: 10px 12px; text-align: right; font-family: var(--font-mono);">${item.win_prob.toFixed(2)}%</td>
+                        <td style="padding: 10px 12px; text-align: right; font-family: var(--font-mono);">${item.threshold.toFixed(2)}%</td>
+                        <td style="padding: 10px 12px;">${item.regime}</td>
+                        <td style="padding: 10px 12px; font-weight: bold; color: var(--text-secondary);">${reason}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                // Render Chart
+                const ctx = document.getElementById('rejectionsPieChart').getContext('2d');
+                if (rejectionsPieChart) {
+                    rejectionsPieChart.destroy();
+                }
+                
+                const labels = Object.keys(counts).filter(k => counts[k] > 0);
+                const chartData = labels.map(k => counts[k]);
+                
+                const colorMap = {
+                    "LOW_PROB": "#ff3860",
+                    "TREND_VETO": "#ffdd57",
+                    "EXTREME_CHOP": "#3273dc",
+                    "CORRELATION": "#7957d5",
+                    "SLIPPAGE": "#ff8c00",
+                    "MAX_TRADES": "#a9a9a9"
+                };
+                const colors = labels.map(k => colorMap[k] || "#4a4a4a");
+                
+                rejectionsPieChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: chartData,
+                            backgroundColor: colors,
+                            borderWidth: 1,
+                            borderColor: 'var(--border-color)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#fff',
+                                    font: { size: 10 }
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("[ERROR] Failed to load rejections:", err);
+            }
         }
 
         // Fetch on boot, and refresh every 10 seconds

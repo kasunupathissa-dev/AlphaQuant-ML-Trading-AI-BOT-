@@ -493,6 +493,41 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
 
+        # V8.8 API Endpoint: Signal Rejections Log
+        elif path == '/api/rejections':
+            rejections = []
+            from database_config import get_db_engine
+            from sqlalchemy import text
+            try:
+                engine = get_db_engine()
+                query = "SELECT * FROM signal_rejection_history ORDER BY timestamp DESC LIMIT 250"
+                with engine.connect() as conn:
+                    result = conn.execute(text(query))
+                    for row in result.mappings():
+                        rejections.append(dict(row))
+                self.send_json(rejections)
+            except Exception as e:
+                # Fallback to local CSV if database fails or is not available
+                csv_file = "signal_rejections_fallback.csv"
+                if os.path.exists(csv_file):
+                    try:
+                        with open(csv_file, mode='r', encoding='utf-8') as f:
+                            reader = csv.DictReader(f)
+                            for row in reader:
+                                row = {k.lower(): v for k, v in row.items() if k is not None}
+                                try:
+                                    if 'timestamp' in row: row['timestamp'] = int(row['timestamp'])
+                                    if 'win_prob' in row: row['win_prob'] = float(row['win_prob'])
+                                    if 'threshold' in row: row['threshold'] = float(row['threshold'])
+                                except ValueError:
+                                    pass
+                                rejections.append(row)
+                        self.send_json(rejections[::-1][:250])
+                    except Exception as csv_err:
+                        self.send_json({"error": f"Failed to read CSV rejections: {str(csv_err)}"}, 500)
+                else:
+                    self.send_json({"error": f"Failed to query database rejections: {str(e)}"}, 500)
+
         # 4. Static Page: index.html
         elif path in ('/', '/index.html'):
             html_path = os.path.join(TEMPLATES_DIR, "index.html")
