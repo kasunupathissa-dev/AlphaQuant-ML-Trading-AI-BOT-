@@ -51,7 +51,7 @@ MAX_PRICE_DEVIATION_PCT = 0.005    # Max price deviation (0.5%) to prevent chasi
 # --- Dynamic Filters (Time, Events, & Multi-Timeframe) ---
 # List of local Stockholm hours (0-23) during which signal generation is disabled.
 # By default, we block late-night/early-morning quiet periods: 23:00 to 02:00 Stockholm time (noise/whipsaw hours).
-BLOCKED_HOURS = [23, 0, 1, 2]
+BLOCKED_HOURS = []
 
 # Enable/Disable economic event blockout filter
 NEWS_BLOCKOUT_ENABLED = True

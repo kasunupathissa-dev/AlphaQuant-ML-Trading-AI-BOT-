@@ -40,8 +40,8 @@ MAX_ACTIVE_TRADES = 3
 MAX_POSITION_SIZE_USD = 500.0
 
 # 🚀 Scalping Thresholds (Lowered for frequent trading)
-LONG_CONFIDENCE_THRESHOLD = 53.0
-SHORT_CONFIDENCE_THRESHOLD = 50.0  
+LONG_CONFIDENCE_THRESHOLD = 51.5
+SHORT_CONFIDENCE_THRESHOLD = 49.5  
 
 # 🚀 Tight TP/SL (Scalper exits)
 ATR_STOP_LOSS_MULTIPLIER = 0.8
@@ -50,7 +50,7 @@ MAX_PRICE_DEVIATION_PCT = 0.005
 
 # --- Dynamic Filters ---
 # Block late-night Stockholm hours
-BLOCKED_HOURS = [23, 0, 1, 2]
+BLOCKED_HOURS = []
 
 # Enable/Disable economic event blockout filter
 NEWS_BLOCKOUT_ENABLED = True

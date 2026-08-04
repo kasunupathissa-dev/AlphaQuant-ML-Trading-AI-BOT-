@@ -809,9 +809,15 @@ class AlphaQuantV8_2:
         save_state()
 
     async def ml_inference_loop(self):
+        first_run = True
         while self.running:
             try:
-                await asyncio.sleep(getattr(config, 'INFERENCE_INTERVAL_SECONDS', 3600)) 
+                if not first_run:
+                    await asyncio.sleep(getattr(config, 'INFERENCE_INTERVAL_SECONDS', 900))
+                else:
+                    first_run = False
+                    await asyncio.sleep(5)  # 5s startup delay for WS setup
+                    
                 if not self.running: break
                 
                 # Run Shadow Rejection Auditor
