@@ -27,7 +27,7 @@ except ImportError:
     ZoneInfo = None
 
 # 🟢 V8.2 Upgrade: JSON Serialization Fix
-import config 
+import config_scalper as config
 from database_config import get_db_engine
 from feature_library import calculate_features_for_shotgun, calculate_zscore
 
@@ -1182,7 +1182,7 @@ if __name__ == "__main__":
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     
-    engine = AlphaQuantV8_2()
+    engine = AlphaQuantSCALPER_HUNT()
     try:
         asyncio.run(engine.run())
     except KeyboardInterrupt:
