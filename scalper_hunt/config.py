@@ -1,3 +1,5 @@
+import os
+
 # AlphaQuant SCALPER_HUNT Configuration File
 
 # --- System Settings ---
@@ -6,9 +8,9 @@ STATE_FILE = "live_engine_state_scalper.json"
 LIVE_TRADING_ENABLED = False
 
 # --- Binance Futures Testnet (Demo Trading) Settings ---
-BINANCE_API_KEY = "X0djHJJWnlj5ynaZvVKdiq0krjTVr9i5m42f0YS9WJaMr7tIZfKTahj1pAStliSc"
-BINANCE_API_SECRET = "pG1xQQLlZDWiImnMJnWCKX9MdvtYL1kiS1IG5d2HHqDbsPDSkGKMBVqEvD1MoMjF"
-USE_TESTNET = True
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "X0djHJJWnlj5ynaZvVKdiq0krjTVr9i5m42f0YS9WJaMr7tIZfKTahj1pAStliSc")
+BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "pG1xQQLlZDWiImnMJnWCKX9MdvtYL1kiS1IG5d2HHqDbsPDSkGKMBVqEvD1MoMjF")
+USE_TESTNET = os.getenv("USE_TESTNET", "True").lower() in ("true", "1", "yes")
 
 # --- Timeframe Settings ---
 TIMEFRAME = "15m"  # 15M target
