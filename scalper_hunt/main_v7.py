@@ -27,7 +27,7 @@ except ImportError:
     ZoneInfo = None
 
 # 🟢 V8.2 Upgrade: JSON Serialization Fix
-import config_scalper as config
+import config 
 from database_config import get_db_engine
 from feature_library import calculate_features_for_shotgun, calculate_zscore
 

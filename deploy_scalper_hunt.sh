@@ -30,7 +30,7 @@ cp "$SOURCE_DIR"/database_config.py "$TARGET_DIR"/
 
 # Step 3: Copy custom scalper main and config
 echo "[INFO] Overwriting with customized SCALPER_HUNT scripts..."
-cp "$SOURCE_DIR"/scalper_hunt/config.py "$TARGET_DIR"/config_scalper.py
+cp "$SOURCE_DIR"/scalper_hunt/config.py "$TARGET_DIR"/config.py
 cp "$SOURCE_DIR"/scalper_hunt/main_v7.py "$TARGET_DIR"/main_v7.py
 
 # Step 4: Setup python virtual env in target folder if it doesn't exist
