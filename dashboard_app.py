@@ -18,7 +18,7 @@ except ImportError:
 
 def format_timestamp_stockholm(ts):
     """Formats a unix timestamp into Stockholm timezone."""
-    tz_name = getattr(config, 'TIMEZONE', 'Europe/Stockholm')
+    tz_name = getattr(cfg, 'TIMEZONE', 'Europe/Stockholm')
     if ZoneInfo is not None:
         try:
             return datetime.fromtimestamp(ts, ZoneInfo(tz_name)).strftime("%Y-%m-%d %H:%M:%S")
@@ -36,24 +36,65 @@ if len(sys.argv) > 1:
     except ValueError:
         pass
 
-STATE_FILE = "live_engine_state.json"
-LOG_FILE = "trading_log_v8.csv"
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Sniper paths
+STATE_FILE_SNIPPER = os.path.join(REPO_ROOT, "live_engine_state.json")
+LOG_FILE_SNIPPER = os.path.join(REPO_ROOT, "trading_log_v8.csv")
+MODEL_METADATA_SNIPER = os.path.join(REPO_ROOT, "model_metadata.json")
+ERRORS_FILE_SNIPER = os.path.join(REPO_ROOT, "backend_errors.log")
+
+# Scalper paths
+STATE_FILE_SCALPER = os.path.join(os.path.dirname(REPO_ROOT), "AlphaQuant-SCALPER-HUNT", "live_engine_state_scalper.json")
+LOG_FILE_SCALPER = os.path.join(os.path.dirname(REPO_ROOT), "AlphaQuant-SCALPER-HUNT", "trading_log_scalper.csv")
+MODEL_METADATA_SCALPER = os.path.join(os.path.dirname(REPO_ROOT), "AlphaQuant-SCALPER-HUNT", "model_metadata.json")
+ERRORS_FILE_SCALPER = os.path.join(os.path.dirname(REPO_ROOT), "AlphaQuant-SCALPER-HUNT", "backend_errors.log")
+
+# Fallback to absolute paths if directory doesn't exist
+if not os.path.exists(STATE_FILE_SCALPER):
+    STATE_FILE_SCALPER = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT/live_engine_state_scalper.json"
+if not os.path.exists(LOG_FILE_SCALPER):
+    LOG_FILE_SCALPER = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT/trading_log_scalper.csv"
+if not os.path.exists(MODEL_METADATA_SCALPER):
+    MODEL_METADATA_SCALPER = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT/model_metadata.json"
+if not os.path.exists(ERRORS_FILE_SCALPER):
+    ERRORS_FILE_SCALPER = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT/backend_errors.log"
+
 TEMPLATES_DIR = "templates"
 
-def log_backend_error(category, message):
+def get_bot_config(bot_param):
+    if bot_param == 'scalper':
+        scalper_dir = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT"
+        if not os.path.exists(scalper_dir):
+            scalper_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "AlphaQuant-SCALPER-HUNT")
+        config_path = os.path.join(scalper_dir, "config.py")
+        if os.path.exists(config_path):
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("config_scalper", config_path)
+                config_scalper = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(config_scalper)
+                return config_scalper
+            except Exception as e:
+                print(f"[WARNING] Failed to load config dynamically from {config_path}: {e}")
+    return config
+
+def log_backend_error(category, message, bot_param='sniper'):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    errors_file = ERRORS_FILE_SCALPER if bot_param == 'scalper' else ERRORS_FILE_SNIPPER
+    state_file = STATE_FILE_SCALPER if bot_param == 'scalper' else STATE_FILE_SNIPPER
     # 1. Log to file
     try:
-        with open("backend_errors.log", "a", encoding="utf-8") as ef:
+        with open(errors_file, "a", encoding="utf-8") as ef:
             ef.write(f"[{timestamp}] [{category}] {message}\n")
     except Exception as log_err:
-        print(f"[ERROR] Failed to write to backend_errors.log: {log_err}")
+        print(f"[ERROR] Failed to write to {errors_file}: {log_err}")
     
     # 2. Append to state latest_errors
     try:
         state_data = {}
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, 'r') as f:
+        if os.path.exists(state_file):
+            with open(state_file, 'r') as f:
                 state_data = json.load(f)
         
         errors = state_data.get("latest_errors", [])
@@ -66,7 +107,7 @@ def log_backend_error(category, message):
             errors.pop(0)
         
         state_data["latest_errors"] = errors
-        with open(STATE_FILE, 'w') as f:
+        with open(state_file, 'w') as f:
             json.dump(state_data, f, indent=4)
     except Exception as state_err:
         print(f"[ERROR] Failed to update latest_errors in state: {state_err}")
@@ -92,15 +133,22 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         from urllib.parse import urlparse, parse_qs
         parsed_path = urlparse(self.path)
         path = parsed_path.path
+        query = parse_qs(parsed_path.query)
+        bot_param = query.get('bot', ['sniper'])[0].lower()
+        
+        state_file = STATE_FILE_SCALPER if bot_param == 'scalper' else STATE_FILE_SNIPPER
+        log_file = LOG_FILE_SCALPER if bot_param == 'scalper' else LOG_FILE_SNIPPER
+        cfg = get_bot_config(bot_param)
+        metadata_file = MODEL_METADATA_SCALPER if bot_param == 'scalper' else MODEL_METADATA_SNIPER
 
         # 1. API Endpoint: State
         if path == '/api/state':
-            if os.path.exists(STATE_FILE):
+            if os.path.exists(state_file):
                 try:
-                    with open(STATE_FILE, 'r') as f:
+                    with open(state_file, 'r') as f:
                         state_data = json.load(f)
                     # Check if bot is active (state file modified within last 2 minutes)
-                    last_mod = os.path.getmtime(STATE_FILE)
+                    last_mod = os.path.getmtime(state_file)
                     is_active = (datetime.now().timestamp() - last_mod) < 120
                     state_data["is_active"] = is_active
                     state_data["last_update"] = format_timestamp_stockholm(last_mod)
@@ -126,9 +174,9 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         # 2. API Endpoint: Trades Log
         elif path == '/api/trades':
             trades = []
-            if os.path.exists(LOG_FILE):
+            if os.path.exists(log_file):
                 try:
-                    with open(LOG_FILE, mode='r', encoding='utf-8') as f:
+                    with open(log_file, mode='r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         for row in reader:
                             # Normalize keys to lowercase
@@ -188,11 +236,11 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 "asset_breakdown": {}
             }
             
-            if os.path.exists(LOG_FILE):
+            if os.path.exists(log_file):
                 try:
                     trades_list = []
                     
-                    with open(LOG_FILE, mode='r', encoding='utf-8') as f:
+                    with open(log_file, mode='r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         for row in reader:
                             row = {k.lower(): v for k, v in row.items() if k is not None}
@@ -212,7 +260,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                 # Estimate position size: risk / SL distance * entry
                                 sl_dist = abs(entry - sl)
                                 psize = (10.0 / sl_dist) * entry if sl_dist > 1e-6 else 0.0
-                                estimated_fee = psize * getattr(config, 'ESTIMATED_FEE_PCT', 0.0008)
+                                estimated_fee = psize * getattr(cfg, 'ESTIMATED_FEE_PCT', 0.0008)
                                 net_pnl_val = pnl - estimated_fee
                                 
                                 trades_list.append({
@@ -401,9 +449,9 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
         # 🟢 V8.5 API Endpoint: Calibration reliability curves
         elif path == '/api/calibration':
-            if os.path.exists("model_metadata.json"):
+            if os.path.exists(metadata_file):
                 try:
-                    with open("model_metadata.json", 'r') as f:
+                    with open(metadata_file, 'r') as f:
                         meta = json.load(f)
                     self.send_json(meta)
                 except Exception as e:
@@ -414,7 +462,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 query_params = parse_qs(parsed_path.query)
                 asset_filter = query_params.get('asset', [None])[0]
                 
-                if os.path.exists(LOG_FILE):
+                if os.path.exists(log_file):
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/csv')
                     
@@ -427,7 +475,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     
-                    with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                    with open(log_file, 'r', encoding='utf-8') as f:
                         content = f.read()
                         
                     if asset_filter:
@@ -478,7 +526,17 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        if self.path == '/api/config':
+        from urllib.parse import urlparse, parse_qs
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query = parse_qs(parsed_path.query)
+        bot_param = query.get('bot', ['sniper'])[0].lower()
+        
+        state_file = STATE_FILE_SCALPER if bot_param == 'scalper' else STATE_FILE_SNIPPER
+        log_file = LOG_FILE_SCALPER if bot_param == 'scalper' else LOG_FILE_SNIPPER
+        cfg = get_bot_config(bot_param)
+        
+        if path == '/api/config':
             try:
                 content_length = int(self.headers['Content-Length'])
                 post_data = self.rfile.read(content_length)
@@ -486,8 +544,8 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 
                 # Load existing state
                 state_data = {}
-                if os.path.exists(STATE_FILE):
-                    with open(STATE_FILE, 'r') as f:
+                if os.path.exists(state_file):
+                    with open(state_file, 'r') as f:
                         state_data = json.load(f)
                 
                 updated = False
@@ -532,11 +590,11 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                         realized_pnl = locked_pnl + remaining_pnl
                         
                         # Execute Testnet order on exit (opposite direction) if enabled
-                        if getattr(config, 'USE_TESTNET', False) and getattr(config, 'BINANCE_API_KEY', ''):
+                        if getattr(cfg, 'USE_TESTNET', False) and getattr(cfg, 'BINANCE_API_KEY', ''):
                             try:
                                 exchange = ccxt.binance({
-                                    'apiKey': getattr(config, 'BINANCE_API_KEY', ''),
-                                    'secret': getattr(config, 'BINANCE_API_SECRET', ''),
+                                    'apiKey': getattr(cfg, 'BINANCE_API_KEY', ''),
+                                    'secret': getattr(cfg, 'BINANCE_API_SECRET', ''),
                                     'enableRateLimit': True,
                                     'options': {
                                         'defaultType': 'future',
@@ -570,13 +628,13 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                                     )
                                     print(f"[API TESTNET] Force closed position for {asset} on Testnet. Order ID: {order.get('id')}")
                             except Exception as testnet_err:
-                                log_backend_error("Manual Close", f"Failed to place manual close order on Testnet for {asset}: {testnet_err}")
+                                log_backend_error("Manual Close", f"Failed to place manual close order on Testnet for {asset}: {testnet_err}", bot_param)
                                 raise Exception(f"Failed to place manual close order on Binance Testnet: {testnet_err}")
                         
                         # Log to CSV file (Only after successful Binance exit)
                         try:
-                            file_exists = os.path.isfile(LOG_FILE)
-                            with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
+                            file_exists = os.path.isfile(log_file)
+                            with open(log_file, mode="a", newline="", encoding="utf-8") as f:
                                 writer = csv.writer(f)
                                 if not file_exists:
                                     writer.writerow(["Timestamp", "Asset", "Direction", "Entry", "TP", "SL", "Status", "AI_Prob", "PNL", "SignalType"])
@@ -616,7 +674,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     updated = True
                         
                 if updated:
-                    with open(STATE_FILE, 'w') as f:
+                    with open(state_file, 'w') as f:
                         json.dump(state_data, f, indent=4)
                     print(f"[API] Updated config in state file: {req_data}")
                     
@@ -626,12 +684,12 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         elif self.path == '/api/clear_errors':
             try:
                 state_data = {}
-                if os.path.exists(STATE_FILE):
-                    with open(STATE_FILE, 'r') as f:
+                if os.path.exists(state_file):
+                    with open(state_file, 'r') as f:
                         state_data = json.load(f)
                 
                 state_data["latest_errors"] = []
-                with open(STATE_FILE, 'w') as f:
+                with open(state_file, 'w') as f:
                     json.dump(state_data, f, indent=4)
                 
                 self.send_json({"status": "success"})
@@ -640,7 +698,10 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         elif self.path == '/api/retrain':
             try:
                 import subprocess
-                subprocess.Popen([sys.executable, "model_training_v7.py"])
+                training_script = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT/model_training_v7.py" if bot_param == "scalper" else "model_training_v7.py"
+                if not os.path.exists(training_script):
+                    training_script = "model_training_v7.py"
+                subprocess.Popen([sys.executable, training_script])
                 self.send_json({"status": "success", "message": "Retraining started in the background."})
             except Exception as e:
                 self.send_json({"status": "error", "message": str(e)}, 500)

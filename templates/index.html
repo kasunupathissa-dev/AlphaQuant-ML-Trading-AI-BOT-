@@ -636,6 +636,10 @@
                 <span id="bot-status-text">LIVE</span>
             </div>
             <span style="width: 1px; height: 16px; background: var(--border-color); margin: 0 8px;"></span>
+            <div class="bot-selector-group" style="display: flex; gap: 4px; background: rgba(255,255,255,0.02); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); margin-right: 12px;">
+                <button id="bot-select-sniper" class="nav-btn active" onclick="selectBot('sniper')" style="margin: 0; background: none; border: none; font-size: 11px;">🎯 Sniper</button>
+                <button id="bot-select-scalper" class="nav-btn" onclick="selectBot('scalper')" style="margin: 0; background: none; border: none; font-size: 11px;">⚡ Scalper</button>
+            </div>
             <button id="nav-dashboard" class="nav-btn active" onclick="switchToView('dashboard')">📊 Dashboard</button>
             <button id="nav-calibration" class="nav-btn" onclick="switchToView('calibration')">🧠 Model Health</button>
             <button id="nav-config" class="nav-btn" onclick="switchToView('config')">⚙️ Configuration</button>
@@ -1391,6 +1395,43 @@
     <script>
         let pnlChart = null;
         let dismissedAlerts = new Set();
+
+        // --- Unified Bot Selection Logic ---
+        let currentBot = 'sniper';
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (typeof url === 'string' && url.startsWith('/api/')) {
+                const separator = url.includes('?') ? '&' : '?';
+                url = `${url}${separator}bot=${currentBot}`;
+            }
+            return originalFetch(url, options);
+        };
+
+        function selectBot(bot) {
+            currentBot = bot;
+            
+            // Toggle active styling
+            document.getElementById('bot-select-sniper').classList.toggle('active', bot === 'sniper');
+            document.getElementById('bot-select-scalper').classList.toggle('active', bot === 'scalper');
+            
+            // Refresh currently active panel
+            const views = ['dashboard', 'calibration', 'config', 'penalty'];
+            for (const v of views) {
+                const navBtn = document.getElementById(`nav-${v}`);
+                if (navBtn && navBtn.classList.contains('active')) {
+                    if (v === 'dashboard') {
+                        fetchDashboardData();
+                    } else if (v === 'calibration') {
+                        loadCalibrationHealthData();
+                    } else if (v === 'config') {
+                        loadConfigPanelData();
+                    } else if (v === 'penalty') {
+                        loadPenaltyBoxPanelData();
+                    }
+                    break;
+                }
+            }
+        }
 
         // --- Asset Drill-Down View Logic ---
         let selectedAsset = 'BTC/USDT';
