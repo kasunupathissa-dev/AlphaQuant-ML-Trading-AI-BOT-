@@ -100,11 +100,7 @@ def run_optimizer():
             continue
 
         # Load all available historical price data
-        query = f"""
-        SELECT * FROM {table_market} 
-        WHERE asset = '{asset}' 
-        ORDER BY timestamp DESC
-        """
+        query = f"SELECT * FROM {table_market} WHERE asset = '{asset}' ORDER BY timestamp DESC"
         try:
             with engine.connect() as conn:
                 df = pd.read_sql(text(query), conn)
@@ -184,7 +180,8 @@ def run_optimizer():
                 optimal_overrides[f"{asset}_{direction}"] = 65.0 if direction == "LONG" else 60.0
 
     # Write out optimal configurations
-    output_file = "optimal_thresholds.json"
+    output_dir = os.path.dirname(os.path.abspath(__file__))
+    output_file = os.path.join(output_dir, "optimal_thresholds.json")
     with open(output_file, 'w') as f:
         json.dump(optimal_overrides, f, indent=4)
     print(f"\n[SUCCESS] Optimal thresholds written to {output_file}:")
