@@ -500,9 +500,10 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             from sqlalchemy import text
             try:
                 engine = get_db_engine()
-                query = "SELECT * FROM signal_rejection_history ORDER BY timestamp DESC LIMIT 250"
+                # Query only rejections matching the requested bot
+                query = "SELECT * FROM signal_rejection_history WHERE bot = :bot ORDER BY timestamp DESC LIMIT 250"
                 with engine.connect() as conn:
-                    result = conn.execute(text(query))
+                    result = conn.execute(text(query), {"bot": bot_param})
                     for row in result.mappings():
                         rejections.append(dict(row))
                 self.send_json(rejections)
@@ -515,6 +516,8 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                             reader = csv.DictReader(f)
                             for row in reader:
                                 row = {k.lower(): v for k, v in row.items() if k is not None}
+                                if row.get('bot', 'sniper').lower() != bot_param:
+                                    continue
                                 try:
                                     if 'timestamp' in row: row['timestamp'] = int(row['timestamp'])
                                     if 'win_prob' in row: row['win_prob'] = float(row['win_prob'])

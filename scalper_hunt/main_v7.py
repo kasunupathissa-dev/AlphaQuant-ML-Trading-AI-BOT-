@@ -39,7 +39,7 @@ except Exception as e:
     print(f"[WARNING] Database connection failed on init: {e}")
 
 # 🟢 V8.5 Calibration Class definition to support unpickling
-def log_signal_rejection(engine, asset, direction, win_prob, threshold, regime, reason):
+def log_signal_rejection(engine, asset, direction, win_prob, threshold, regime, reason, bot="scalper"):
     """
     Logs rejected signals to the database, falling back to a local CSV file if connection fails.
     """
@@ -47,8 +47,8 @@ def log_signal_rejection(engine, asset, direction, win_prob, threshold, regime, 
     try:
         from sqlalchemy import text
         query = """
-        INSERT INTO signal_rejection_history (timestamp, asset, direction, win_prob, threshold, regime, rejection_reason)
-        VALUES (:timestamp, :asset, :direction, :win_prob, :threshold, :regime, :reason)
+        INSERT INTO signal_rejection_history (timestamp, asset, direction, win_prob, threshold, regime, rejection_reason, bot)
+        VALUES (:timestamp, :asset, :direction, :win_prob, :threshold, :regime, :reason, :bot)
         """
         with engine.connect() as connection:
             connection.execute(text(query), {
@@ -58,7 +58,8 @@ def log_signal_rejection(engine, asset, direction, win_prob, threshold, regime, 
                 "win_prob": float(win_prob),
                 "threshold": float(threshold),
                 "regime": regime,
-                "reason": reason
+                "reason": reason,
+                "bot": bot
             })
             connection.commit()
     except Exception as e:
@@ -69,8 +70,8 @@ def log_signal_rejection(engine, asset, direction, win_prob, threshold, regime, 
             with open(csv_file, mode='a', newline='') as f:
                 writer = csv.writer(f)
                 if not file_exists:
-                    writer.writerow(["timestamp", "asset", "direction", "win_prob", "threshold", "regime", "rejection_reason"])
-                writer.writerow([timestamp, asset, direction, win_prob, threshold, regime, reason])
+                    writer.writerow(["timestamp", "asset", "direction", "win_prob", "threshold", "regime", "rejection_reason", "bot"])
+                writer.writerow([timestamp, asset, direction, win_prob, threshold, regime, reason, bot])
         except Exception as csv_err:
             print(f"[ERROR] CSV fallback writing failed: {csv_err}")
 
@@ -441,7 +442,7 @@ def track_rejected_signal(asset, direction, win_prob, threshold, entry_price, at
     save_state()
     
     # 🟢 Write rejection metadata to SQL Database / CSV fallback
-    log_signal_rejection(global_db_engine, asset, direction, win_prob, threshold, regime, reason)
+    log_signal_rejection(global_db_engine, asset, direction, win_prob, threshold, regime, reason, bot="scalper")
 
 class AlphaQuantSCALPER_HUNT:
     def __init__(self):

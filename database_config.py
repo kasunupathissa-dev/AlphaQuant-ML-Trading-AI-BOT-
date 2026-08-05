@@ -33,11 +33,19 @@ def get_db_engine():
                     win_prob DOUBLE,
                     threshold DOUBLE,
                     regime VARCHAR(20),
-                    rejection_reason VARCHAR(50)
+                    rejection_reason VARCHAR(50),
+                    bot VARCHAR(15)
                 )
                 """
                 connection.execute(text(create_table_query))
                 connection.commit()
+                
+                # Dynamic migration to add bot column to existing MySQL tables
+                try:
+                    connection.execute(text("ALTER TABLE signal_rejection_history ADD COLUMN bot VARCHAR(15)"))
+                    connection.commit()
+                except Exception:
+                    pass
             return engine
         except Exception as e:
             print(f"[FATAL] Could not connect to MySQL database: {e}")
@@ -56,9 +64,17 @@ def get_db_engine():
                 win_prob DOUBLE,
                 threshold DOUBLE,
                 regime VARCHAR(20),
-                rejection_reason VARCHAR(50)
+                rejection_reason VARCHAR(50),
+                bot VARCHAR(15)
             )
             """
             connection.execute(text(create_table_query))
             connection.commit()
+            
+            # Dynamic migration to add bot column to existing SQLite tables
+            try:
+                connection.execute(text("ALTER TABLE signal_rejection_history ADD COLUMN bot VARCHAR(15)"))
+                connection.commit()
+            except Exception:
+                pass
         return engine

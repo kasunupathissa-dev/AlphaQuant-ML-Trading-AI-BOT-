@@ -1459,7 +1459,7 @@
             document.getElementById('bot-select-scalper').classList.toggle('active', bot === 'scalper');
             
             // Refresh currently active panel
-            const views = ['dashboard', 'calibration', 'config', 'penalty'];
+            const views = ['dashboard', 'calibration', 'config', 'penalty', 'rejections'];
             for (const v of views) {
                 const navBtn = document.getElementById(`nav-${v}`);
                 if (navBtn && navBtn.classList.contains('active')) {
@@ -1471,6 +1471,8 @@
                         loadConfigPanelData();
                     } else if (v === 'penalty') {
                         loadPenaltyBoxPanelData();
+                    } else if (v === 'rejections') {
+                        loadRejectionsLogData();
                     }
                     break;
                 }
@@ -3090,7 +3092,13 @@
 
         // Fetch on boot, and refresh every 10 seconds
         fetchDashboardData();
-        setInterval(fetchDashboardData, 10000);
+        setInterval(() => {
+            fetchDashboardData();
+            const rejectionsBtn = document.getElementById('nav-rejections');
+            if (rejectionsBtn && rejectionsBtn.classList.contains('active')) {
+                loadRejectionsLogData();
+            }
+        }, 10000);
     </script>
 
     <!-- --- Force Close Modal --- -->
