@@ -467,6 +467,17 @@ class AlphaQuantSCALPER_HUNT:
             except Exception as e:
                 print(f"[WARNING] Failed to load optimal thresholds file: {e}")
 
+        # Load optimal HTF rule overrides if available
+        self.optimal_htf_rules = {}
+        opt_htf_file = "optimal_htf_rules.json"
+        if os.path.exists(opt_htf_file):
+            try:
+                with open(opt_htf_file, 'r') as f:
+                    self.optimal_htf_rules = json.load(f)
+                print(f"[INFO] Loaded optimal HTF rule overrides from {opt_htf_file}: {self.optimal_htf_rules}")
+            except Exception as e:
+                print(f"[WARNING] Failed to load optimal HTF rules file: {e}")
+
         for asset in config.TARGET_ASSETS:
             safe_filename = asset.replace("/", "_") + "_brain.pkl"
             if os.path.exists(safe_filename):
@@ -1034,24 +1045,34 @@ class AlphaQuantSCALPER_HUNT:
                                 ema_fast = last_closed['ema_50']
                                 ema_slow = last_closed['ema_200']
                                 
-                                if direction == "LONG" and not (close_val > ema_fast and ema_fast > ema_slow):
-                                    print(f"[REJECT] {asset} LONG signal rejected. Higher-Timeframe trend is not bullish (Close: {close_val:.2f}, Fast EMA: {ema_fast:.2f}, Slow EMA: {ema_slow:.2f}).")
+                                # Retrieve HTF rule override, fallback to STRICT (default)
+                                htf_rule = self.optimal_htf_rules.get(f"{asset}_{direction}", "STRICT")
+                                
+                                is_vetoed = False
+                                if htf_rule == "STRICT":
+                                    if direction == "LONG" and not (close_val > ema_fast and ema_fast > ema_slow):
+                                        is_vetoed = True
+                                    elif direction == "SHORT" and not (close_val < ema_fast and ema_fast < ema_slow):
+                                        is_vetoed = True
+                                elif htf_rule == "EMA_CROSS":
+                                    if direction == "LONG" and not (ema_fast > ema_slow):
+                                        is_vetoed = True
+                                    elif direction == "SHORT" and not (ema_fast < ema_slow):
+                                        is_vetoed = True
+                                elif htf_rule == "PRICE_ABOVE":
+                                    if direction == "LONG" and not (close_val > ema_slow):
+                                        is_vetoed = True
+                                    elif direction == "SHORT" and not (close_val < ema_slow):
+                                        is_vetoed = True
+                                
+                                if is_vetoed:
+                                    print(f"[REJECT] {asset} {direction} signal rejected. HTF trend filter failed using rule {htf_rule} (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f}).")
                                     msg = (
                                         f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (HTF TREND VETO)*\n"
                                         f"• *Asset*: {asset} | *Direction*: {direction}\n"
                                         f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                        f"• *Reason*: HTF trend not bullish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
-                                    )
-                                    track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO", regime)
-                                    send_telegram_message(msg)
-                                    continue
-                                elif direction == "SHORT" and not (close_val < ema_fast and ema_fast < ema_slow):
-                                    print(f"[REJECT] {asset} SHORT signal rejected. Higher-Timeframe trend is not bearish (Close: {close_val:.2f}, Fast EMA: {ema_fast:.2f}, Slow EMA: {ema_slow:.2f}).")
-                                    msg = (
-                                        f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (HTF TREND VETO)*\n"
-                                        f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                        f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                        f"• *Reason*: HTF trend not bearish (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
+                                        f"• *Rule*: `{htf_rule}`\n"
+                                        f"• *Reason*: HTF trend filter failed (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
                                     )
                                     track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO", regime)
                                     send_telegram_message(msg)
