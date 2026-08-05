@@ -2987,6 +2987,17 @@
             });
         }
 
+        function formatUnixTimestamp(ms) {
+            const date = new Date(ms);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            const ss = String(date.getSeconds()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+        }
+
         let rejectionsPieChart = null;
 
         async function loadRejectionsLogData() {
@@ -3019,7 +3030,7 @@
                 };
                 
                 data.forEach(item => {
-                    const timeStr = format_timestamp_stockholm(item.timestamp / 1000);
+                    const timeStr = formatUnixTimestamp(item.timestamp);
                     const row = document.createElement('tr');
                     
                     const reason = item.rejection_reason || item.reason || "UNKNOWN";
@@ -3029,12 +3040,17 @@
                         counts[reason] = (counts[reason] || 0) + 1;
                     }
                     
+                    const winProbVal = item.win_prob != null ? parseFloat(item.win_prob) : 0.0;
+                    const thresholdVal = item.threshold != null ? parseFloat(item.threshold) : 0.0;
+                    const winProb = isNaN(winProbVal) ? "0.00" : winProbVal.toFixed(2);
+                    const threshold = isNaN(thresholdVal) ? "0.00" : thresholdVal.toFixed(2);
+                    
                     row.innerHTML = `
                         <td style="padding: 10px 12px; font-family: var(--font-mono); font-size: 12px;">${timeStr}</td>
                         <td style="padding: 10px 12px; font-weight: bold;">${item.asset}</td>
                         <td style="padding: 10px 12px;"><span class="badge ${item.direction === 'LONG' ? 'badge-win' : 'badge-loss'}">${item.direction}</span></td>
-                        <td style="padding: 10px 12px; text-align: right; font-family: var(--font-mono);">${item.win_prob.toFixed(2)}%</td>
-                        <td style="padding: 10px 12px; text-align: right; font-family: var(--font-mono);">${item.threshold.toFixed(2)}%</td>
+                        <td style="padding: 10px 12px; text-align: right; font-family: var(--font-mono);">${winProb}%</td>
+                        <td style="padding: 10px 12px; text-align: right; font-family: var(--font-mono);">${threshold}%</td>
                         <td style="padding: 10px 12px;">${item.regime}</td>
                         <td style="padding: 10px 12px; font-weight: bold; color: var(--text-secondary);">${reason}</td>
                     `;
