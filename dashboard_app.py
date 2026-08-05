@@ -18,7 +18,7 @@ except ImportError:
 
 def format_timestamp_stockholm(ts):
     """Formats a unix timestamp into Stockholm timezone."""
-    tz_name = getattr(cfg, 'TIMEZONE', 'Europe/Stockholm')
+    tz_name = getattr(config, 'TIMEZONE', 'Europe/Stockholm')
     if ZoneInfo is not None:
         try:
             return datetime.fromtimestamp(ts, ZoneInfo(tz_name)).strftime("%Y-%m-%d %H:%M:%S")
