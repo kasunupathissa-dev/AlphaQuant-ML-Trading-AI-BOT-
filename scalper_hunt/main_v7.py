@@ -526,7 +526,7 @@ class AlphaQuantSCALPER_HUNT:
         print("[INFO] Reconciling open positions...")
         if active_trades:
             print(f"[INFO] Found {len(active_trades)} trades in state file. Re-adopting...")
-            for trade in active_trades: asset_locks[trade['asset']] = True
+            for trade in active_trades: asset_locks[trade['asset']] = False
         else:
             print("[INFO] No open positions in state file.")
 
@@ -604,8 +604,6 @@ class AlphaQuantSCALPER_HUNT:
 
     async def manage_active_trades(self, symbol, current_price):
         global active_trades
-        if asset_locks.get(symbol, False):
-            return
         load_state()
         trade_closed = False
         updated_trades = [t for t in active_trades if t['asset'] != symbol]
@@ -919,7 +917,7 @@ class AlphaQuantSCALPER_HUNT:
                             save_state()
                         else:
                             continue
-                    if asset_locks.get(asset, False): continue
+                    if asset_locks.get(asset, False) or asset in [t['asset'] for t in active_trades]: continue
                     
                     try:
                         fetch_limit = 1600 if config.TIMEFRAME == "15m" else 250
@@ -1173,12 +1171,16 @@ class AlphaQuantSCALPER_HUNT:
                                 signal_type = "REVERSION"
                             
                             # Place Testnet Entry Order if enabled
-                            order_id = await execute_testnet_order(
-                                self.exchange_reg,
-                                symbol=asset,
-                                direction=direction,
-                                amount=position_size / entry_price
-                            )
+                            asset_locks[asset] = True
+                            try:
+                                order_id = await execute_testnet_order(
+                                    self.exchange_reg,
+                                    symbol=asset,
+                                    direction=direction,
+                                    amount=position_size / entry_price
+                                )
+                            finally:
+                                asset_locks[asset] = False
                             
                             # 🟢 V8.5 active_trades metadata: Include entry_time (timestamp) and signal_type
                             active_trades.append({
@@ -1208,7 +1210,6 @@ class AlphaQuantSCALPER_HUNT:
                                     "trigger_category": int(last_closed['trigger_category'])
                                 }
                             })
-                            asset_locks[asset] = True
                             save_state()
                             
                             # Send Telegram Notification for executed trade
