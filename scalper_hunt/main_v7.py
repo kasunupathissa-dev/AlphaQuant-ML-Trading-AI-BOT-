@@ -1008,9 +1008,8 @@ class AlphaQuantSCALPER_HUNT:
                             regime = "TRENDING"
                             
                         regime_adjustment = 0.0
-                        if regime == "CHOPPY":
-                            if trigger_cat in [1, 2]: # TREND or BREAKOUT
-                                regime_adjustment = 5.0 # Raise threshold by 5% to avoid whipsaws in chop
+                        if regime == "CHOPPY" and trigger_cat in [1, 2]:
+                            regime_adjustment = 0.0 # Handled via 50% position size reduction instead
                         elif regime == "TRENDING":
                             if trigger_cat in [1, 2]: # TREND or BREAKOUT
                                 regime_adjustment = -2.5 # Lower threshold by 2.5% to capture strong trend breakouts
@@ -1043,8 +1042,8 @@ class AlphaQuantSCALPER_HUNT:
                                 ema_fast = last_closed['ema_50']
                                 ema_slow = last_closed['ema_200']
                                 
-                                # Retrieve HTF rule override, fallback to STRICT (default)
-                                htf_rule = self.optimal_htf_rules.get(f"{asset}_{direction}", "STRICT")
+                                # Retrieve HTF rule override, fallback to PRICE_ABOVE (default)
+                                htf_rule = self.optimal_htf_rules.get(f"{asset}_{direction}", "PRICE_ABOVE")
                                 
                                 is_vetoed = False
                                 if htf_rule == "STRICT":
@@ -1081,8 +1080,8 @@ class AlphaQuantSCALPER_HUNT:
                             last_chop = chop_series.iloc[-1]
                             last_adx = last_closed['adx_14']
                             
-                            if last_chop > 61.8 and last_adx < 20:
-                                print(f"[REJECT] {asset} signal rejected. Market is in Chop/Sideways regime (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20).")
+                            if last_chop > 70.0 and last_adx < 15.0:
+                                print(f"[REJECT] {asset} signal rejected. Market is in Chop/Sideways regime (Chop: {last_chop:.2f} > 70.0, ADX: {last_adx:.2f} < 15.0).")
                                 msg = (
                                     f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (EXTREME CHOP)*\n"
                                     f"• *Asset*: {asset} | *Direction*: {direction}\n"
@@ -1141,6 +1140,9 @@ class AlphaQuantSCALPER_HUNT:
                                 
                             atr_val = last_closed['atr']
                             sl = entry_price - atr_val * config.ATR_STOP_LOSS_MULTIPLIER if direction == "LONG" else entry_price + atr_val * config.ATR_STOP_LOSS_MULTIPLIER
+                            # Apply 0.15% Stop-Loss padding to prevent stop-hunting
+                            sl = sl * 0.9985 if direction == "LONG" else sl * 1.0015
+                            
                             tp = entry_price + atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER if direction == "LONG" else entry_price - atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER
                             # --- Dynamic Risk Sizing (Kelly-ATR Hybrid) ---
                             confidence_factor = 1.0 + (win_prob - threshold) / (100.0 - threshold)
@@ -1149,6 +1151,10 @@ class AlphaQuantSCALPER_HUNT:
                             volatility_factor = np.clip(vol_factor, 0.5, 1.5)
                             
                             base_risk = getattr(config, 'RISK_PER_TRADE_USD', 10.0)
+                            # Reduce position risk by 50% in Choppy regimes instead of threshold penalty
+                            if regime == "CHOPPY":
+                                base_risk = base_risk * 0.5
+                                
                             target_risk = base_risk * confidence_factor * volatility_factor
                             # Cap absolute risk per trade at 2.0x base_risk to prevent over-exposure
                             target_risk = min(target_risk, base_risk * 2.0)
