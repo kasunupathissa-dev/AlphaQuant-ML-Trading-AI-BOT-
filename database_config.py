@@ -50,7 +50,8 @@ def get_db_engine():
         except Exception as e:
             print(f"[FATAL] Could not connect to MySQL database: {e}")
             print("Please ensure the database exists, credentials are correct, and 'mysqlclient' is installed.")
-            exit()
+            print("[WARNING] Running without DB connection. Rejection logs will fall back to CSV.")
+            return None
     else:
         print("[INFO] Using local SQLite database.")
         engine = create_engine("sqlite:///alphaquant_ml_v4.db")
