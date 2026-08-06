@@ -8,12 +8,7 @@ import json
 
 DB_NAME = "alphaquant_ml_v4.db"
 
-# We will track a focused list of major coins for the async engine
-TARGET_ASSETS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", 
-    "ADA/USDT", "XRP/USDT", "AVAX/USDT", "LINK/USDT", 
-    "DOGE/USDT", "DOT/USDT"
-]
+from config import TARGET_ASSETS
 
 class AsyncMarketDataEngine:
     def __init__(self):
