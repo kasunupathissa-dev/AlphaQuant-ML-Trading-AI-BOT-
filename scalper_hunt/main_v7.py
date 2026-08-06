@@ -982,6 +982,13 @@ class AlphaQuantSCALPER_HUNT:
                         # Win probability is the probability of class 1 (SUCCESS)
                         win_prob = probabilities[1] * 100
 
+                        # 🟢 Compute tentative TP/SL and max allowed trades for notifications
+                        atr_val = last_closed['atr']
+                        tentative_sl = last_closed['close'] - atr_val * config.ATR_STOP_LOSS_MULTIPLIER if direction == "LONG" else last_closed['close'] + atr_val * config.ATR_STOP_LOSS_MULTIPLIER
+                        tentative_sl = tentative_sl * 0.9985 if direction == "LONG" else tentative_sl * 1.0015
+                        tentative_tp = last_closed['close'] + atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER if direction == "LONG" else last_closed['close'] - atr_val * config.ATR_TAKE_PROFIT_MULTIPLIER
+                        max_allowed = getattr(config, 'MAX_ACTIVE_TRADES', 3)
+
                         # 🟢 V8.5 Funnel: Increment generated signal count
                         signal_funnel["generated"] += 1
                         save_state()
@@ -1040,8 +1047,16 @@ class AlphaQuantSCALPER_HUNT:
                                 msg = (
                                     f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (MAX TRADES)*\n"
                                     f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                    f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                    f"• *Reason*: Maximum active trades limit reached ({len(active_trades)}/{max_allowed})."
+                                    f"• *Entry Price*: `${last_closed['close']:.4f}` | *Exit Price*: `${tentative_tp:.4f}` | *Stop Loss*: `${tentative_sl:.4f}`\n\n"
+                                    f"🛡️ *Filtration Pipeline Checklist (7 Filters)*:\n"
+                                    f"✅ *1. Trade Mode*: Active ({trade_mode})\n"
+                                    f"✅ *2. ML Win Probability*: `{win_prob:.2f}%` (Passed: `{threshold:.2f}%`)\n"
+                                    f"❌ *3. Max Concurrent Trades*: `{len(active_trades)}/{max_allowed}` Active (Limit Reached)\n"
+                                    f"⏳ *4. HTF Trend Veto*: PRICE_ABOVE\n"
+                                    f"⏳ *5. Volatility Chop Filter*: Chop `{last_chop:.1f}` / ADX `{last_adx:.1f}`\n"
+                                    f"⏳ *6. Correlation Guard*: No BTC/ETH Overlap\n"
+                                    f"⏳ *7. REST Price Slippage*: Limit 0.50%\n\n"
+                                    f"• *Reason*: Maximum active trades limit reached."
                                 )
                                 track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "MAX_TRADES", regime)
                                 send_telegram_message(msg)
@@ -1078,9 +1093,16 @@ class AlphaQuantSCALPER_HUNT:
                                     msg = (
                                         f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (HTF TREND VETO)*\n"
                                         f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                        f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                        f"• *Rule*: `{htf_rule}`\n"
-                                        f"• *Reason*: HTF trend filter failed (Close: {close_val:.2f}, EMA50: {ema_fast:.2f}, EMA200: {ema_slow:.2f})."
+                                        f"• *Entry Price*: `${last_closed['close']:.4f}` | *Exit Price*: `${tentative_tp:.4f}` | *Stop Loss*: `${tentative_sl:.4f}`\n\n"
+                                        f"🛡️ *Filtration Pipeline Checklist (7 Filters)*:\n"
+                                        f"✅ *1. Trade Mode*: Active ({trade_mode})\n"
+                                        f"✅ *2. ML Win Probability*: `{win_prob:.2f}%` (Passed: `{threshold:.2f}%`)\n"
+                                        f"✅ *3. Max Concurrent Trades*: `{len(active_trades)}/{max_allowed}` Active\n"
+                                        f"❌ *4. HTF Trend Veto*: {htf_rule} Failed (Close: {close_val:.2f}, EMA200: {ema_slow:.2f})\n"
+                                        f"⏳ *5. Volatility Chop Filter*: Chop `{last_chop:.1f}` / ADX `{last_adx:.1f}`\n"
+                                        f"⏳ *6. Correlation Guard*: No BTC/ETH Overlap\n"
+                                        f"⏳ *7. REST Price Slippage*: Limit 0.50%\n\n"
+                                        f"• *Reason*: HTF trend filter failed using rule {htf_rule}."
                                     )
                                     track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "TREND_VETO", regime)
                                     send_telegram_message(msg)
@@ -1096,8 +1118,16 @@ class AlphaQuantSCALPER_HUNT:
                                 msg = (
                                     f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (EXTREME CHOP)*\n"
                                     f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                    f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                    f"• *Reason*: Market in Extreme Chop/Sideways (Chop: {last_chop:.2f} > 61.8, ADX: {last_adx:.2f} < 20)."
+                                    f"• *Entry Price*: `${last_closed['close']:.4f}` | *Exit Price*: `${tentative_tp:.4f}` | *Stop Loss*: `${tentative_sl:.4f}`\n\n"
+                                    f"🛡️ *Filtration Pipeline Checklist (7 Filters)*:\n"
+                                    f"✅ *1. Trade Mode*: Active ({trade_mode})\n"
+                                    f"✅ *2. ML Win Probability*: `{win_prob:.2f}%` (Passed: `{threshold:.2f}%`)\n"
+                                    f"✅ *3. Max Concurrent Trades*: `{len(active_trades)}/{max_allowed}` Active\n"
+                                    f"✅ *4. HTF Trend Veto*: PRICE_ABOVE\n"
+                                    f"❌ *5. Volatility Chop Filter*: Chop `{last_chop:.1f}` / ADX `{last_adx:.1f}` (Limit: Chop < 70 / ADX > 15)\n"
+                                    f"⏳ *6. Correlation Guard*: No BTC/ETH Overlap\n"
+                                    f"⏳ *7. REST Price Slippage*: Limit 0.50%\n\n"
+                                    f"• *Reason*: Market in Extreme Chop/Sideways."
                                 )
                                 track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "EXTREME_CHOP", regime)
                                 send_telegram_message(msg)
@@ -1115,8 +1145,16 @@ class AlphaQuantSCALPER_HUNT:
                                     msg = (
                                         f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (CORRELATION)*\n"
                                         f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                        f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                        f"• *Reason*: Correlated asset {correlated_pair} already has an active {direction} trade."
+                                        f"• *Entry Price*: `${last_closed['close']:.4f}` | *Exit Price*: `${tentative_tp:.4f}` | *Stop Loss*: `${tentative_sl:.4f}`\n\n"
+                                        f"🛡️ *Filtration Pipeline Checklist (7 Filters)*:\n"
+                                        f"✅ *1. Trade Mode*: Active ({trade_mode})\n"
+                                        f"✅ *2. ML Win Probability*: `{win_prob:.2f}%` (Passed: `{threshold:.2f}%`)\n"
+                                        f"✅ *3. Max Concurrent Trades*: `{len(active_trades)}/{max_allowed}` Active\n"
+                                        f"✅ *4. HTF Trend Veto*: PRICE_ABOVE\n"
+                                        f"✅ *5. Volatility Chop Filter*: Chop `{last_chop:.1f}` / ADX `{last_adx:.1f}`\n"
+                                        f"❌ *6. Correlation Guard*: Correlated asset {correlated_pair} already has active trade\n"
+                                        f"⏳ *7. REST Price Slippage*: Limit 0.50%\n\n"
+                                        f"• *Reason*: Correlated asset {correlated_pair} already active."
                                     )
                                     track_rejected_signal(asset, direction, win_prob, threshold, last_closed['close'], last_closed['atr'], "CORRELATION", regime)
                                     send_telegram_message(msg)
@@ -1142,8 +1180,16 @@ class AlphaQuantSCALPER_HUNT:
                                 msg = (
                                     f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (SLIPPAGE)*\n"
                                     f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                    f"• *AI Win Prob*: `{win_prob:.2f}%` (Passed Threshold `{threshold:.2f}%`)\n"
-                                    f"• *Reason*: Live price ${entry_price:,.4f} deviates too far from trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%)."
+                                    f"• *Entry Price*: `${last_closed['close']:.4f}` | *Exit Price*: `${tentative_tp:.4f}` | *Stop Loss*: `${tentative_sl:.4f}`\n\n"
+                                    f"🛡️ *Filtration Pipeline Checklist (7 Filters)*:\n"
+                                    f"✅ *1. Trade Mode*: Active ({trade_mode})\n"
+                                    f"✅ *2. ML Win Probability*: `{win_prob:.2f}%` (Passed: `{threshold:.2f}%`)\n"
+                                    f"✅ *3. Max Concurrent Trades*: `{len(active_trades)}/{max_allowed}` Active\n"
+                                    f"✅ *4. HTF Trend Veto*: PRICE_ABOVE\n"
+                                    f"✅ *5. Volatility Chop Filter*: Chop `{last_chop:.1f}` / ADX `{last_adx:.1f}`\n"
+                                    f"✅ *6. Correlation Guard*: No BTC/ETH Overlap\n"
+                                    f"❌ *7. REST Price Slippage*: Live ${entry_price:,.4f} trigger ${trigger_price:,.4f} (Deviation: {deviation*100:.2f}% > Limit: {config.MAX_PRICE_DEVIATION_PCT*100:.2f}%)\n\n"
+                                    f"• *Reason*: Live price deviates too far from trigger."
                                 )
                                 track_rejected_signal(asset, direction, win_prob, threshold, entry_price, last_closed['atr'], "SLIPPAGE", regime)
                                 send_telegram_message(msg)
@@ -1252,8 +1298,15 @@ class AlphaQuantSCALPER_HUNT:
                             msg = (
                                 f"⚠️ *[SCALPER_HUNT] SIGNAL REJECTED (LOW PROBABILITY)*\n"
                                 f"• *Asset*: {asset} | *Direction*: {direction}\n"
-                                f"• *AI Win Prob*: `{win_prob:.2f}%`\n"
-                                f"• *Required Threshold*: `{threshold:.2f}%`\n"
+                                f"• *Entry Price*: `${last_closed['close']:.4f}` | *Exit Price*: `${tentative_tp:.4f}` | *Stop Loss*: `${tentative_sl:.4f}`\n\n"
+                                f"🛡️ *Filtration Pipeline Checklist (7 Filters)*:\n"
+                                f"✅ *1. Trade Mode*: Active ({trade_mode})\n"
+                                f"❌ *2. ML Win Probability*: `{win_prob:.2f}%` (Required: `{threshold:.2f}%`)\n"
+                                f"⏳ *3. Max Concurrent Trades*: `{len(active_trades)}/{max_allowed}` Active\n"
+                                f"⏳ *4. HTF Trend Veto*: PRICE_ABOVE\n"
+                                f"⏳ *5. Volatility Chop Filter*: Chop `{last_chop:.1f}` / ADX `{last_adx:.1f}`\n"
+                                f"⏳ *6. Correlation Guard*: No BTC/ETH Overlap\n"
+                                f"⏳ *7. REST Price Slippage*: Limit 0.50%\n\n"
                                 f"• *Regime*: `{regime}` | *Trigger Cat*: `{trigger_cat}`\n"
                                 f"• *Reason*: Under minimum ML confidence threshold."
                             )
