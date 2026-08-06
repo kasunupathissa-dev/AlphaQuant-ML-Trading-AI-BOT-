@@ -119,6 +119,34 @@ class QuantValidationSuiteV8:
             return
 
         features = brain_data['features']
+
+        # ===================================================================
+        # 🛡️ PIPELINE GUARDRAILS (Suggestion 5) — Fail Fast on Silent Bugs
+        # ===================================================================
+        # Guard 1: ADX non-negative check (catches DM sign inversion regression)
+        if 'adx_14' in df.columns:
+            neg_adx = (df['adx_14'] < 0).sum()
+            assert neg_adx == 0, f"[GUARDRAIL FAIL] CRITICAL: {neg_adx} negative ADX values detected for {asset}! Check minus_dm sign in feature_library.py."
+
+        # Guard 2: Label starvation check (catches NaN sentinel regression)
+        if 'target_label' in df.columns:
+            total_rows_raw = len(pd.read_sql(f"SELECT * FROM {self.table_name} WHERE asset = '{asset}'", self.engine))
+            triggered_rows = len(df)
+            nan_pct = 1.0 - (triggered_rows / max(total_rows_raw, 1))
+            assert nan_pct < 0.97, f"[GUARDRAIL FAIL] CRITICAL: {nan_pct:.1%} of labels are NaN/ignored for {asset}! Possible label starvation — check label_generator NaN sentinel."
+
+        # Guard 3: Infinite value check (catches divide-by-zero regressions)
+        inf_mask = df[features].isin([np.inf, -np.inf]).any(axis=1)
+        inf_count = inf_mask.sum()
+        assert inf_count == 0, f"[GUARDRAIL FAIL] CRITICAL: {inf_count} rows with Inf values in features for {asset}! Check feature_library.py."
+
+        # Guard 4: Feature schema alignment (catches brain/feature-store version mismatch)
+        missing_features = set(features) - set(df.columns)
+        assert len(missing_features) == 0, f"[GUARDRAIL FAIL] CRITICAL: Brain feature mismatch for {asset}! Missing columns: {missing_features}. Re-run pipeline."
+
+        print(f"  [✅ GUARDRAILS PASSED] ADX, Labels, Inf Values, Schema — all clean for {asset}.")
+        # ===================================================================
+
         X = df[features]
         y = df['target_label']
 

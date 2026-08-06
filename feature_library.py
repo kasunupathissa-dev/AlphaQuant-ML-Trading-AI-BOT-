@@ -130,7 +130,18 @@ def calculate_features_for_shotgun(df):
     # Volume Z-score
     vol_period = 120 if config.TIMEFRAME == "15m" else 30
     features['volume_zscore'] = calculate_zscore(features['volume'], vol_period)
-    
+
+    # --- Microstructure Features (Suggestion 4A & 4C) ---
+    # RVOL: Relative Volume — current bar volume vs 20-period rolling mean
+    # Values > 1.5 indicate genuine breakout volume vs low-volume fakeout
+    features['rvol'] = features['volume'] / (features['volume'].rolling(20).mean() + 1e-8)
+
+    # ATR Compression Ratio — 14-period ATR divided by 100-period ATR
+    # Values < 0.5 signal a volatility squeeze before an expansion move
+    atr_fast = calculate_atr(features, 14)
+    atr_slow = calculate_atr(features, 100)
+    features['atr_compression'] = atr_fast / (atr_slow + 1e-8)
+
     features['dist_ema_50'] = (features['close'] - features['ema_50']) / features['ema_50']
     features['dist_ema_200'] = (features['close'] - features['ema_200']) / features['ema_200']
     features['atr_pct'] = features['atr'] / features['close']

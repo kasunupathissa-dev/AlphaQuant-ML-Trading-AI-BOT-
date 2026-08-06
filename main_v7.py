@@ -146,6 +146,12 @@ trade_mode = "BOTH"
 rejected_signal_tracker = []
 last_audit_time = time.time()
 
+# 🟢 Suggestion 2: Dynamic Adaptive Threshold — rolling buffer of last 50 raw model scores per asset
+# Used to compute np.percentile-based gate that scales with the live model distribution
+asset_score_buffer: dict = {asset: [] for asset in config.TARGET_ASSETS}
+SCORE_BUFFER_SIZE = 50       # Keep last N predictions per asset
+DYNAMIC_PERCENTILE_GATE = 85 # Top 15th percentile passes (top 15% of recent scores)
+
 def get_local_time():
     """Returns the current datetime in the Stockholm timezone (or fallback UTC+2)."""
     tz_name = getattr(config, 'TIMEZONE', 'Europe/Stockholm')
@@ -493,6 +499,12 @@ class AlphaQuantV8_2:
                 try:
                     brain_data = joblib.load(safe_filename)
                     if 'model' in brain_data and 'features' in brain_data:
+                        # 🛡️ BOOT GUARDRAIL: Verify brain features match config before loading
+                        EXPECTED_NEW_FEATURES = {'rvol', 'atr_compression'}
+                        brain_features = set(brain_data['features'])
+                        missing = EXPECTED_NEW_FEATURES - brain_features
+                        if missing:
+                            print(f"[WARNING] Brain for {asset} is STALE — missing features: {missing}. Bot will use it but retrain is recommended.")
                         brains[asset] = brain_data
                         print(f"[INFO] Loaded V8 brain for {asset}.")
                     else:
@@ -1037,7 +1049,22 @@ class AlphaQuantV8_2:
                             threshold += regime_adjustment
                             if regime_adjustment != 0.0:
                                 print(f"  [REGIME ADJUST] {asset} in {regime} regime. Trigger Cat: {trigger_cat}. Adjusted threshold: {threshold:.2f}% (adjustment: {regime_adjustment:+.1f}%)")
-                                    
+
+                        # 🟢 Suggestion 2: Dynamic Adaptive Threshold
+                        # Update the rolling score buffer with this cycle's raw win_prob
+                        asset_score_buffer[asset].append(win_prob)
+                        if len(asset_score_buffer[asset]) > SCORE_BUFFER_SIZE:
+                            asset_score_buffer[asset].pop(0)
+
+                        # If we have enough history, blend static threshold with percentile gate
+                        if len(asset_score_buffer[asset]) >= 10:
+                            dynamic_floor = np.percentile(asset_score_buffer[asset], DYNAMIC_PERCENTILE_GATE)
+                            # Use the LOWER of static and dynamic — prevents over-filtering in depressed markets
+                            effective_threshold = min(threshold, dynamic_floor)
+                            if abs(effective_threshold - threshold) > 0.5:
+                                print(f"  [DYNAMIC GATE] {asset}: static={threshold:.2f}% | dynamic_floor={dynamic_floor:.2f}% | effective={effective_threshold:.2f}%")
+                            threshold = effective_threshold
+
                         if win_prob >= threshold:
                             # Enforce maximum concurrent active trades limit
                             max_allowed = getattr(config, 'MAX_ACTIVE_TRADES', 3)
@@ -1207,6 +1234,9 @@ class AlphaQuantV8_2:
                             volatility_factor = np.clip(vol_factor, 0.5, 1.5)
                             
                             base_risk = getattr(config, 'RISK_PER_TRADE_USD', 10.0)
+                            # 🟢 Suggestion 3: Apply per-asset risk tier multiplier
+                            risk_tier = getattr(config, 'ASSET_RISK_TIERS', {}).get(asset, 1.0)
+                            base_risk = base_risk * risk_tier
                             # Reduce position risk by 50% in Choppy regimes instead of threshold penalty
                             if regime == "CHOPPY":
                                 base_risk = base_risk * 0.5
