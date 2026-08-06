@@ -332,6 +332,9 @@ def send_telegram_message(msg):
             response = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
             if response.status_code != 200:
                 print(f"[ERROR] Failed to send Telegram message. Status: {response.status_code}")
+                if response.status_code == 400:
+                    print("[INFO] Retrying Telegram message in plain text format...")
+                    requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg}, timeout=10)
         except requests.exceptions.RequestException as e:
             print(f"[ERROR] Telegram request failed: {e}")
     try:
@@ -848,7 +851,7 @@ class AlphaQuantSCALPER_HUNT:
         ]
         
         if not completed_sigs:
-            send_telegram_message("📊 *[SCALPER_HUNT] Hourly Rejection Audit*\n• *Status*: Active\n• *Signals Audited in Last Hour*: `0`\n• *Capital Saved*: `$0.00` (Market flat, no exits).")
+            print("[INFO] Hourly Rejection Audit: 0 completed signals audited in last hour.")
             last_audit_time = current_time
             rejected_signal_tracker = [sig for sig in rejected_signal_tracker if sig["status"] == "PENDING"]
             save_state()
@@ -916,8 +919,7 @@ class AlphaQuantSCALPER_HUNT:
                     continue
                 
                 load_state()
-                send_telegram_message(f"🧠 *[SCALPER_HUNT] Starting Shotgun Inference Cycle on {len(brains)} assets...*")
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Executing V8.2 Shotgun Pipeline...")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting SCALPER_HUNT Inference Cycle on {len(brains)} assets...")
 
                 for asset in brains.keys():
                     if asset in asset_penalty_box:
@@ -1261,7 +1263,7 @@ class AlphaQuantSCALPER_HUNT:
                     except Exception as e:
                         print(f"[ERROR] Inference failed for {asset}: {e}", file=sys.stderr)
 
-                send_telegram_message("✅ *[SCALPER_HUNT] Shotgun Inference Cycle Complete.*")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] SCALPER_HUNT Inference Cycle Complete.")
 
             except asyncio.CancelledError: break
 
