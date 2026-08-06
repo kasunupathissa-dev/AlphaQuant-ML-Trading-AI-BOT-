@@ -27,24 +27,35 @@ class ManualCalibratedClassifier(BaseEstimator, ClassifierMixin):
         if sample_weight is not None:
             fit_params['sample_weight'] = sample_weight
             
-        this_estimator = clone(self.estimator)
+        # Manual out-of-fold predictions for TimeSeriesSplit
         ts_cv = TimeSeriesSplit(n_splits=self.cv)
-        oof_probs = cross_val_predict(
-            this_estimator, X, y, cv=ts_cv,
-            method='predict_proba', params=fit_params
-        )
+        oof_probs = np.full((len(X), n_classes), np.nan)
         
+        for train_idx, test_idx in ts_cv.split(X, y):
+            X_tr, X_te = X.iloc[train_idx], X.iloc[test_idx]
+            y_tr, y_te = y.iloc[train_idx], y.iloc[test_idx]
+            
+            fold_fit_params = {}
+            if sample_weight is not None:
+                fold_fit_params['sample_weight'] = sample_weight.iloc[train_idx]
+                
+            fold_estimator = clone(self.estimator)
+            fold_estimator.fit(X_tr, y_tr, **fold_fit_params)
+            oof_probs[test_idx] = fold_estimator.predict_proba(X_te)
+            
         self.estimator_ = clone(self.estimator)
         if sample_weight is not None:
             self.estimator_.fit(X, y, sample_weight=sample_weight)
         else:
             self.estimator_.fit(X, y)
             
+        # Only fit calibrators on valid test fold predictions
+        valid_mask = ~np.isnan(oof_probs[:, 0])
         self.calibrators_ = []
         for i, c in enumerate(self.classes_):
             y_bin = (y == c).astype(int)
             calibrator = IsotonicRegression(out_of_bounds='clip')
-            calibrator.fit(oof_probs[:, i], y_bin)
+            calibrator.fit(oof_probs[valid_mask, i], y_bin[valid_mask])
             self.calibrators_.append(calibrator)
             
         return self
