@@ -612,172 +612,169 @@ class AlphaQuantSCALPER_HUNT:
 
     async def manage_active_trades(self, symbol, current_price):
         global active_trades
-        await self.state_lock.acquire()
-        try:
+        async with self.state_lock:
             load_state()
             trade_closed = False
             updated_trades = [t for t in active_trades if t['asset'] != symbol]
 
-        for trade in [t for t in active_trades if t['asset'] == symbol]:
-            is_closed, result, pnl = False, "", 0.0
-            notional = trade.get('position_size', 100)
+            for trade in [t for t in active_trades if t['asset'] == symbol]:
+                is_closed, result, pnl = False, "", 0.0
+                notional = trade.get('position_size', 100)
             
-            # --- Dynamic Trailing Stop-Loss Logic ---
-            entry_atr = trade.get('entry_atr')
-            if entry_atr is None:
-                # Fallback calculation if entry_atr is missing from state
-                entry_atr = abs(trade['tp'] - trade['entry']) / 1.5
+                # --- Dynamic Trailing Stop-Loss Logic ---
+                entry_atr = trade.get('entry_atr')
+                if entry_atr is None:
+                    # Fallback calculation if entry_atr is missing from state
+                    entry_atr = abs(trade['tp'] - trade['entry']) / 1.5
                 
-            # --- Partial Take Profit (Runner Logic) ---
-            if not trade.get('half_closed', False):
+                # --- Partial Take Profit (Runner Logic) ---
+                if not trade.get('half_closed', False):
+                    if trade['direction'] == "LONG":
+                        # Partial TP activation threshold (price reached Entry + 1.0x ATR)
+                        if current_price >= trade['entry'] + entry_atr:
+                            half_pnl = (notional / 2) * ((current_price - trade['entry']) / trade['entry'])
+                            trade['locked_pnl'] = trade.get('locked_pnl', 0.0) + half_pnl
+                            trade['position_size'] = notional / 2
+                            trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
+                            trade['half_closed'] = True
+                            trade_closed = True
+                        
+                            # Execute Testnet order for partial TP (sell to reduce LONG)
+                            await execute_testnet_order(
+                                self.exchange_reg,
+                                symbol=symbol,
+                                direction='SHORT',
+                                amount=(notional / 2) / trade['entry']
+                            )
+                        
+                            msg = (
+                                f"🔔 *[SCALPER_HUNT] PARTIAL TP EXECUTED*\n"
+                                f"• *Asset*: {symbol} | LONG\n"
+                                f"• *Closed 50%* at: `${current_price:,.4f}`\n"
+                                f"• *Locked PnL*: *${half_pnl:+.2f}*\n"
+                                f"• *SL moved to breakeven*: `${trade['entry']:,.4f}`"
+                            )
+                            send_telegram_message(msg)
+                    else:
+                        # Partial TP activation threshold (price reached Entry - 1.0x ATR)
+                        if current_price <= trade['entry'] - entry_atr:
+                            half_pnl = (notional / 2) * ((trade['entry'] - current_price) / trade['entry'])
+                            trade['locked_pnl'] = trade.get('locked_pnl', 0.0) + half_pnl
+                            trade['position_size'] = notional / 2
+                            trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
+                            trade['half_closed'] = True
+                            trade_closed = True
+                        
+                            # Execute Testnet order for partial TP (buy to reduce SHORT)
+                            await execute_testnet_order(
+                                self.exchange_reg,
+                                symbol=symbol,
+                                direction='LONG',
+                                amount=(notional / 2) / trade['entry']
+                            )
+                        
+                            msg = (
+                                f"🔔 *[SCALPER_HUNT] PARTIAL TP EXECUTED*\n"
+                                f"• *Asset*: {symbol} | SHORT\n"
+                                f"• *Closed 50%* at: `${current_price:,.4f}`\n"
+                                f"• *Locked PnL*: *${half_pnl:+.2f}*\n"
+                                f"• *SL moved to breakeven*: `${trade['entry']:,.4f}`"
+                            )
+                            send_telegram_message(msg)
+
                 if trade['direction'] == "LONG":
-                    # Partial TP activation threshold (price reached Entry + 1.0x ATR)
+                    # Update highest watermark
+                    trade['highest_price'] = max(trade.get('highest_price', trade['entry']), current_price)
+                    # Check activation threshold (price reached Entry + 1.0x ATR)
                     if current_price >= trade['entry'] + entry_atr:
-                        half_pnl = (notional / 2) * ((current_price - trade['entry']) / trade['entry'])
-                        trade['locked_pnl'] = trade.get('locked_pnl', 0.0) + half_pnl
-                        trade['position_size'] = notional / 2
-                        trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
-                        trade['half_closed'] = True
-                        trade_closed = True
-                        
-                        # Execute Testnet order for partial TP (sell to reduce LONG)
-                        await execute_testnet_order(
-                            self.exchange_reg,
-                            symbol=symbol,
-                            direction='SHORT',
-                            amount=(notional / 2) / trade['entry']
-                        )
-                        
-                        msg = (
-                            f"🔔 *[SCALPER_HUNT] PARTIAL TP EXECUTED*\n"
-                            f"• *Asset*: {symbol} | LONG\n"
-                            f"• *Closed 50%* at: `${current_price:,.4f}`\n"
-                            f"• *Locked PnL*: *${half_pnl:+.2f}*\n"
-                            f"• *SL moved to breakeven*: `${trade['entry']:,.4f}`"
-                        )
-                        send_telegram_message(msg)
+                        trade['trailing_active'] = True
+                    # Shift SL if trailing is active
+                    if trade.get('trailing_active', False):
+                        new_sl = trade['highest_price'] - entry_atr
+                        if trade['sl'] < new_sl:
+                            trade['sl'] = new_sl
+                            trade_closed = True # SL updated, persist state
                 else:
-                    # Partial TP activation threshold (price reached Entry - 1.0x ATR)
+                    # Update lowest watermark
+                    trade['lowest_price'] = min(trade.get('lowest_price', trade['entry']), current_price)
+                    # Check activation threshold (price reached Entry - 1.0x ATR)
                     if current_price <= trade['entry'] - entry_atr:
-                        half_pnl = (notional / 2) * ((trade['entry'] - current_price) / trade['entry'])
-                        trade['locked_pnl'] = trade.get('locked_pnl', 0.0) + half_pnl
-                        trade['position_size'] = notional / 2
-                        trade['sl'] = trade['entry'] # Move SL to entry (breakeven)
-                        trade['half_closed'] = True
-                        trade_closed = True
-                        
-                        # Execute Testnet order for partial TP (buy to reduce SHORT)
+                        trade['trailing_active'] = True
+                    # Shift SL if trailing is active
+                    if trade.get('trailing_active', False):
+                        new_sl = trade['lowest_price'] + entry_atr
+                        if trade['sl'] > new_sl:
+                            trade['sl'] = new_sl
+                            trade_closed = True # SL updated, persist state
+
+                # --- Check Exits ---
+                if trade['direction'] == "LONG":
+                    if current_price >= trade['tp']: 
+                        is_closed = True
+                        remaining_pnl = trade['position_size'] * ((trade['tp'] - trade['entry']) / trade['entry'])
+                    elif current_price <= trade['sl']: 
+                        is_closed = True
+                        remaining_pnl = trade['position_size'] * ((trade['sl'] - trade['entry']) / trade['entry'])
+                else: 
+                    if current_price <= trade['tp']: 
+                        is_closed = True
+                        remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['tp']) / trade['entry'])
+                    elif current_price >= trade['sl']: 
+                        is_closed = True
+                        remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['sl']) / trade['entry'])
+
+                if is_closed:
+                    # Lock asset immediately to prevent duplicate concurrent close executions
+                    if asset_locks.get(symbol, False):
+                        continue
+                    asset_locks[symbol] = True
+                
+                    trade_closed = True
+                    pnl = trade.get('locked_pnl', 0.0) + remaining_pnl
+                    result = "PROFIT" if pnl >= 0 else "LOSS"
+                    trade.update({'status': result, 'pnl': pnl})
+                
+                    # Execute Testnet order on exit (opposite direction)
+                    exit_direction = 'SHORT' if trade['direction'] == 'LONG' else 'LONG'
+                    try:
                         await execute_testnet_order(
                             self.exchange_reg,
                             symbol=symbol,
-                            direction='LONG',
-                            amount=(notional / 2) / trade['entry']
+                            direction=exit_direction,
+                            amount=trade['position_size'] / trade['entry'],
+                            close_full=True
                         )
-                        
-                        msg = (
-                            f"🔔 *[SCALPER_HUNT] PARTIAL TP EXECUTED*\n"
-                            f"• *Asset*: {symbol} | SHORT\n"
-                            f"• *Closed 50%* at: `${current_price:,.4f}`\n"
-                            f"• *Locked PnL*: *${half_pnl:+.2f}*\n"
-                            f"• *SL moved to breakeven*: `${trade['entry']:,.4f}`"
-                        )
-                        send_telegram_message(msg)
-
-            if trade['direction'] == "LONG":
-                # Update highest watermark
-                trade['highest_price'] = max(trade.get('highest_price', trade['entry']), current_price)
-                # Check activation threshold (price reached Entry + 1.0x ATR)
-                if current_price >= trade['entry'] + entry_atr:
-                    trade['trailing_active'] = True
-                # Shift SL if trailing is active
-                if trade.get('trailing_active', False):
-                    new_sl = trade['highest_price'] - entry_atr
-                    if trade['sl'] < new_sl:
-                        trade['sl'] = new_sl
-                        trade_closed = True # SL updated, persist state
-            else:
-                # Update lowest watermark
-                trade['lowest_price'] = min(trade.get('lowest_price', trade['entry']), current_price)
-                # Check activation threshold (price reached Entry - 1.0x ATR)
-                if current_price <= trade['entry'] - entry_atr:
-                    trade['trailing_active'] = True
-                # Shift SL if trailing is active
-                if trade.get('trailing_active', False):
-                    new_sl = trade['lowest_price'] + entry_atr
-                    if trade['sl'] > new_sl:
-                        trade['sl'] = new_sl
-                        trade_closed = True # SL updated, persist state
-
-            # --- Check Exits ---
-            if trade['direction'] == "LONG":
-                if current_price >= trade['tp']: 
-                    is_closed = True
-                    remaining_pnl = trade['position_size'] * ((trade['tp'] - trade['entry']) / trade['entry'])
-                elif current_price <= trade['sl']: 
-                    is_closed = True
-                    remaining_pnl = trade['position_size'] * ((trade['sl'] - trade['entry']) / trade['entry'])
-            else: 
-                if current_price <= trade['tp']: 
-                    is_closed = True
-                    remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['tp']) / trade['entry'])
-                elif current_price >= trade['sl']: 
-                    is_closed = True
-                    remaining_pnl = trade['position_size'] * ((trade['entry'] - trade['sl']) / trade['entry'])
-
-            if is_closed:
-                # Lock asset immediately to prevent duplicate concurrent close executions
-                if asset_locks.get(symbol, False):
-                    continue
-                asset_locks[symbol] = True
+                    except Exception as close_order_err:
+                        print(f"[ERROR] Failed to execute Testnet close order for {symbol}: {close_order_err}")
                 
-                trade_closed = True
-                pnl = trade.get('locked_pnl', 0.0) + remaining_pnl
-                result = "PROFIT" if pnl >= 0 else "LOSS"
-                trade.update({'status': result, 'pnl': pnl})
+                    log_trade_to_csv(trade)
                 
-                # Execute Testnet order on exit (opposite direction)
-                exit_direction = 'SHORT' if trade['direction'] == 'LONG' else 'LONG'
-                try:
-                    await execute_testnet_order(
-                        self.exchange_reg,
-                        symbol=symbol,
-                        direction=exit_direction,
-                        amount=trade['position_size'] / trade['entry'],
-                        close_full=True
+                    asset_recent_results[symbol].append(1 if result == "PROFIT" else 0)
+                    if len(asset_recent_results[symbol]) > 5: asset_recent_results[symbol].pop(0)
+                
+                    status_icon = "🟢" if result == "PROFIT" else "🔴"
+                    msg = (
+                        f"{status_icon} 🔔 *[SCALPER_HUNT] TRADE CLOSED*\n"
+                        f"• *Asset*: {symbol} | *Direction*: {trade['direction']}\n"
+                        f"• *Status*: *{result}* | *Net PnL*: *${pnl:+.2f}*\n"
+                        f"• *Entry Price*: ${trade['entry']:,.4f}\n"
+                        f"• *Exit Price*: ${current_price:,.4f}\n"
+                        f"• *Take Profit (TP)*: ${trade['tp']:,.4f}\n"
+                        f"• *Stop Loss (SL)*: ${trade['sl']:,.4f}"
                     )
-                except Exception as close_order_err:
-                    print(f"[ERROR] Failed to execute Testnet close order for {symbol}: {close_order_err}")
                 
-                log_trade_to_csv(trade)
+                    if len(asset_recent_results[symbol]) >= 2 and sum(asset_recent_results[symbol][-2:]) == 0:
+                        asset_penalty_box[symbol] = time.time() + (24 * 3600)
+                        msg += f"\n\n🛑 *DEGRADATION LOCK*: {symbol} isolated for 24 hours."
+                        asset_recent_results[symbol] = []
                 
-                asset_recent_results[symbol].append(1 if result == "PROFIT" else 0)
-                if len(asset_recent_results[symbol]) > 5: asset_recent_results[symbol].pop(0)
+                    send_telegram_message(msg)
+                    asset_locks[symbol] = False 
+                else:
+                    updated_trades.append(trade)
                 
-                status_icon = "🟢" if result == "PROFIT" else "🔴"
-                msg = (
-                    f"{status_icon} 🔔 *[SCALPER_HUNT] TRADE CLOSED*\n"
-                    f"• *Asset*: {symbol} | *Direction*: {trade['direction']}\n"
-                    f"• *Status*: *{result}* | *Net PnL*: *${pnl:+.2f}*\n"
-                    f"• *Entry Price*: ${trade['entry']:,.4f}\n"
-                    f"• *Exit Price*: ${current_price:,.4f}\n"
-                    f"• *Take Profit (TP)*: ${trade['tp']:,.4f}\n"
-                    f"• *Stop Loss (SL)*: ${trade['sl']:,.4f}"
-                )
-                
-                if len(asset_recent_results[symbol]) >= 2 and sum(asset_recent_results[symbol][-2:]) == 0:
-                    asset_penalty_box[symbol] = time.time() + (24 * 3600)
-                    msg += f"\n\n🛑 *DEGRADATION LOCK*: {symbol} isolated for 24 hours."
-                    asset_recent_results[symbol] = []
-                
-                send_telegram_message(msg)
-                asset_locks[symbol] = False 
-            else:
-                updated_trades.append(trade)
-                
-            active_trades = updated_trades
-            if trade_closed: save_state()
-        finally:
-            self.state_lock.release()
+                active_trades = updated_trades
+                if trade_closed: save_state()
 
     def audit_rejected_signals(self):
         global rejected_signal_tracker
