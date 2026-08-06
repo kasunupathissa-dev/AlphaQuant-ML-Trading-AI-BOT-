@@ -30,7 +30,7 @@ else:
 
 # --- Target Assets ---
 TARGET_ASSETS = [
-    "BTC/USDT", "SOL/USDT", "NEAR/USDT", "SUI/USDT", 
+    "BTC/USDT", "SOL/USDT", "NEAR/USDT", "SUI/USDT", "HBAR/USDT",
     "XRP/USDT", "LINK/USDT", "AVAX/USDT", "DOGE/USDT", "DOT/USDT"
 ]
 
