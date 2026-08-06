@@ -183,3 +183,7 @@ def calculate_features_for_shotgun(df):
     features.replace([np.inf, -np.inf], np.nan, inplace=True)
     features.dropna(inplace=True)
     return features
+
+def calculate_features_and_signals(df):
+    """Legacy compatibility wrapper for V6.5 feature store."""
+    return calculate_features_for_shotgun(df)
