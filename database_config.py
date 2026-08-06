@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, text
 # The hardcoded values are kept as a fallback for local development.
 DB_TYPE = os.getenv("DB_TYPE", "mysql")
 DB_USER = os.getenv("DB_USER", "aq_user")
-DB_PASS = os.getenv("DB_PASS", "root") # Defaulting to 'root' as per our last fix
+DB_PASS = os.getenv("DB_PASS", "AlphaQuant2024!") # Updated to match server aq_user password
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")
 DB_NAME = os.getenv("DB_NAME", "alphaquant_v5")
