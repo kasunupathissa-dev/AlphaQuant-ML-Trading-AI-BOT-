@@ -22,7 +22,7 @@ def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_ho
     - 0: FAILURE (Price hits SL first, or times out/reaches time limit)
     - -1: IGNORE (No primary signal was generated for this candle)
     """
-    labels = pd.Series(-1, index=df.index, dtype=int)
+    labels = pd.Series(np.nan, index=df.index, dtype=float)
     atr_series = calculate_atr(df, config.ATR_PERIOD)
     
     df_dt_index = df.set_index(pd.to_datetime(df['timestamp'], unit='ms'))
@@ -52,8 +52,10 @@ def calculate_shotgun_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_limit_ho
             continue
 
         end_time = entry_time + pd.Timedelta(hours=time_limit_hours)
+        if df_dt_index.index[-1] < end_time:
+            continue # not enough future data for a full horizon -- exclude, don't fabricate
+            
         future_window = df_dt_index.loc[entry_time:end_time].iloc[1:]
-
         if future_window.empty:
             continue
 
@@ -130,10 +132,10 @@ def generate_and_store_labels():
             df['target_label'] = shotgun_labels
             
             print("  --- Label Distribution ---")
-            label_counts = shotgun_labels.value_counts().sort_index()
-            print(f"    Class 0 (FAILURE): {label_counts.get(0, 0)}")
-            print(f"    Class 1 (SUCCESS): {label_counts.get(1, 0)}")
-            print(f"    Class -1 (IGNORE): {label_counts.get(-1, 0)}")
+            label_counts = shotgun_labels.value_counts(dropna=False).sort_index()
+            print(f"    Class 0 (FAILURE): {label_counts.get(0.0, 0)}")
+            print(f"    Class 1 (SUCCESS): {label_counts.get(1.0, 0)}")
+            print(f"    Ignored/Unresolved: {label_counts.get(np.nan, 0)}")
             print("  --------------------------")
 
             labeled_df = df.dropna(subset=['target_label']).copy()

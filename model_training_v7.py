@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from sklearn.model_selection import train_test_split, cross_val_predict
+from sklearn.model_selection import train_test_split, cross_val_predict, TimeSeriesSplit
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import classification_report
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
@@ -28,8 +28,9 @@ class ManualCalibratedClassifier(BaseEstimator, ClassifierMixin):
             fit_params['sample_weight'] = sample_weight
             
         this_estimator = clone(self.estimator)
+        ts_cv = TimeSeriesSplit(n_splits=self.cv)
         oof_probs = cross_val_predict(
-            this_estimator, X, y, cv=self.cv,
+            this_estimator, X, y, cv=ts_cv,
             method='predict_proba', params=fit_params
         )
         
@@ -107,7 +108,7 @@ def train_shotgun_models():
         X = df[features]
         y = df['target_label']
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
         class_weights = y_train.value_counts(normalize=True)
         weights = y_train.apply(lambda x: 1 / class_weights[x])

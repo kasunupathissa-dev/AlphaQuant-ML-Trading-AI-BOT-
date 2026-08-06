@@ -7,7 +7,7 @@ import time
 import requests
 import os
 import csv
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import json
 import ccxt
 import sys
@@ -325,13 +325,19 @@ def send_telegram_message(msg):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
     # Global replacement of underscores with hyphens to prevent Telegram Markdown 400 errors
     msg = msg.replace("_", "-")
+    def _send():
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            response = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
+            if response.status_code != 200:
+                print(f"[ERROR] Failed to send Telegram message. Status: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Telegram request failed: {e}")
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        response = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
-        if response.status_code != 200:
-            print(f"[ERROR] Failed to send Telegram message. Status: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Telegram request failed: {e}")
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, _send)
+    except RuntimeError:
+        _send()
 
 def calculate_choppiness_index(df, period=14):
     """Calculates Choppiness Index (0-100)."""
@@ -450,6 +456,7 @@ class AlphaQuantV8_2:
         print("==================================================")
         
         if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: print("[WARNING] Telegram secrets not set.")
+        self.state_lock = asyncio.Lock()
 
         load_state()
 
@@ -535,8 +542,9 @@ class AlphaQuantV8_2:
                 assets_to_watch = list(brains.keys())
                 tickers = await self.exchange_pro.watch_tickers(assets_to_watch)
                 for symbol, ticker in tickers.items():
-                    live_prices[symbol] = ticker['last']
-                    await self.manage_active_trades(symbol, ticker['last'])
+                    clean_symbol = symbol.split(':')[0]
+                    live_prices[clean_symbol] = ticker['last']
+                    await self.manage_active_trades(clean_symbol, ticker['last'])
             except Exception as e:
                 err_msg = f"⚠️ *[V8.2] Main Ticker Stream Failed*\nError: `{e}`\nReconnecting in 10 seconds..."
                 print(f"[ERROR] Main ticker stream failed: {e}. Reconnecting...")
@@ -603,9 +611,11 @@ class AlphaQuantV8_2:
 
     async def manage_active_trades(self, symbol, current_price):
         global active_trades
-        load_state()
-        trade_closed = False
-        updated_trades = [t for t in active_trades if t['asset'] != symbol]
+        await self.state_lock.acquire()
+        try:
+            load_state()
+            trade_closed = False
+            updated_trades = [t for t in active_trades if t['asset'] != symbol]
 
         for trade in [t for t in active_trades if t['asset'] == symbol]:
             is_closed, result, pnl = False, "", 0.0
@@ -763,8 +773,10 @@ class AlphaQuantV8_2:
             else:
                 updated_trades.append(trade)
                 
-        active_trades = updated_trades
-        if trade_closed: save_state()
+            active_trades = updated_trades
+            if trade_closed: save_state()
+        finally:
+            self.state_lock.release()
 
     def audit_rejected_signals(self):
         global rejected_signal_tracker
@@ -774,7 +786,7 @@ class AlphaQuantV8_2:
                 continue
             
             asset = sig["asset"]
-            price_key = f"{asset}:USDT"
+            price_key = asset.split(':')[0]
             current_price = live_prices.get(price_key)
             if not current_price:
                 continue

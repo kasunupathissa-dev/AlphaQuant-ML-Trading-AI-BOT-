@@ -105,7 +105,7 @@ def calculate_features_for_shotgun(df):
     
     # --- ADX Calculation (Dynamic Scale) ---
     plus_dm = features['high'].diff()
-    minus_dm = features['low'].diff()
+    minus_dm = -features['low'].diff()
     plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0.0)
     minus_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0.0)
     
@@ -144,7 +144,7 @@ def calculate_features_for_shotgun(df):
     trend_short = np.where((features['prev_close'] >= features['prev_ema_50']) & (features['close'] < features['ema_50']) & (features['ema_50'] < features['ema_200']), 1, 0)
     
     # Breakout Signals (BB Squeeze + Close breakout)
-    bb_squeeze_thresh = features['bb_width'].quantile(0.10)
+    bb_squeeze_thresh = features['bb_width'].expanding(min_periods=100).quantile(0.10)
     is_squeeze = features['bb_width'].shift(1) < bb_squeeze_thresh
     upper_band, lower_band = sma_20 + (std_20 * 2), sma_20 - (std_20 * 2)
     breakout_long = np.where(is_squeeze & (features['close'] > upper_band), 1, 0)
@@ -180,4 +180,6 @@ def calculate_features_for_shotgun(df):
     features['primary_signal'] = primary_signal
     features['trigger_category'] = trigger_category
     
+    features.replace([np.inf, -np.inf], np.nan, inplace=True)
+    features.dropna(inplace=True)
     return features

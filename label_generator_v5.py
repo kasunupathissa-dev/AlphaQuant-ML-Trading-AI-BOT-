@@ -10,9 +10,8 @@ def calculate_triple_barrier_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_l
     Calculates win/loss outcomes for both LONG and SHORT scenarios using a robust
     "default to zero" approach to prevent NaN leakage.
     """
-    # 🟢 V6.6 FIX: Initialize with a default value of 0.0 (Loss) instead of NaN
-    labels_long = pd.Series(0.0, index=df.index)
-    labels_short = pd.Series(0.0, index=df.index)
+    labels_long = pd.Series(np.nan, index=df.index)
+    labels_short = pd.Series(np.nan, index=df.index)
     
     high_low = df['high'] - df['low']
     high_close = np.abs(df['high'] - df['close'].shift())
@@ -28,7 +27,10 @@ def calculate_triple_barrier_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_l
         if pd.isna(current_atr) or current_atr <= 0:
             continue
             
-        end_idx = min(i + time_limit + 1, len(df))
+        end_idx = i + time_limit + 1
+        if end_idx > len(df):
+            continue # not enough future data for a full horizon -- exclude, don't fabricate
+            
         future_window = df.iloc[i+1 : end_idx]
         
         if future_window.empty:
@@ -36,27 +38,37 @@ def calculate_triple_barrier_labels(df, atr_tp_mult=1.5, atr_sl_mult=1.0, time_l
             
         # --- Evaluate LONG Scenario ---
         long_tp, long_sl = entry_price + (current_atr * atr_tp_mult), entry_price - (current_atr * atr_sl_mult)
+        long_resolved = False
         for _, row in future_window.iterrows():
             if row['low'] <= long_sl:
                 labels_long.iloc[i] = 0.0 # Loss
+                long_resolved = True
                 break
             elif row['high'] >= long_tp:
                 labels_long.iloc[i] = 1.0 # Win
+                long_resolved = True
                 break
-
+        if not long_resolved:
+            labels_long.iloc[i] = 0.0 # Loss on timeout
+            
         # --- Evaluate SHORT Scenario ---
         short_tp, short_sl = entry_price - (current_atr * atr_tp_mult), entry_price + (current_atr * atr_sl_mult)
+        short_resolved = False
         for _, row in future_window.iterrows():
             if row['high'] >= short_sl:
                 labels_short.iloc[i] = 0.0 # Loss
+                short_resolved = True
                 break
             elif row['low'] <= short_tp:
                 labels_short.iloc[i] = 1.0 # Win
+                short_resolved = True
                 break
+        if not short_resolved:
+            labels_short.iloc[i] = 0.0 # Loss on timeout
 
-    # The assert statements are now redundant but kept for safety
-    assert not labels_long.isnull().any(), "NaN values found in LONG labels!"
-    assert not labels_short.isnull().any(), "NaN values found in SHORT labels!"
+    # Ensure some labels were successfully resolved
+    assert labels_long.notnull().any(), "No valid LONG labels resolved!"
+    assert labels_short.notnull().any(), "No valid SHORT labels resolved!"
 
     return labels_long, labels_short
 

@@ -117,13 +117,22 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         # Silence default logger to keep terminal output clean
         pass
 
+    def send_cors_headers(self):
+        # Restrict CORS to trusted local/loopback origins
+        origin = self.headers.get('Origin')
+        allowed = ['http://localhost:8080', 'http://127.0.0.1:8080']
+        if origin in allowed:
+            self.send_header('Access-Control-Allow-Origin', origin)
+        else:
+            self.send_header('Access-Control-Allow-Origin', 'http://localhost:8080')
+
     def send_json(self, data, status=200):
         try:
             response_bytes = json.dumps(data).encode('utf-8')
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(response_bytes)))
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_cors_headers()
             self.end_headers()
             self.wfile.write(response_bytes)
         except Exception as e:
@@ -467,12 +476,15 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                     self.send_header('Content-Type', 'text/csv')
                     
                     if asset_filter:
-                        filename = f"{asset_filter.replace('/', '_')}_log.csv"
+                        # Sanitize asset filter to prevent HTTP response splitting
+                        import re
+                        safe_asset = re.sub(r'[^A-Za-z0-9_\-]', '_', asset_filter)
+                        filename = f"{safe_asset}_log.csv"
                     else:
                         filename = "trading_log_v8.csv"
                         
                     self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
-                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_cors_headers()
                     self.end_headers()
                     
                     with open(log_file, 'r', encoding='utf-8') as f:
@@ -558,7 +570,7 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
