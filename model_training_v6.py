@@ -66,12 +66,15 @@ def train_ensemble_models():
                     
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                     
+                    from sklearn.model_selection import TimeSeriesSplit
+                    ts_cv = TimeSeriesSplit(n_splits=3)
+                    
                     xgb_model = xgb.XGBClassifier(n_estimators=300, learning_rate=0.01, max_depth=3, subsample=0.8, colsample_bytree=0.8, objective='binary:logistic', scale_pos_weight=(losses/wins)*1.5)
-                    calibrated_xgb = CalibratedClassifierCV(estimator=xgb_model, method='isotonic', cv=3)
+                    calibrated_xgb = CalibratedClassifierCV(estimator=xgb_model, method='isotonic', cv=ts_cv)
                     calibrated_xgb.fit(X_train, y_train)
                     
                     lgb_model = lgb.LGBMClassifier(n_estimators=300, learning_rate=0.01, max_depth=3, subsample=0.8, colsample_bytree=0.8, objective='binary', scale_pos_weight=(losses/wins)*1.5)
-                    calibrated_lgb = CalibratedClassifierCV(estimator=lgb_model, method='isotonic', cv=3)
+                    calibrated_lgb = CalibratedClassifierCV(estimator=lgb_model, method='isotonic', cv=ts_cv)
                     calibrated_lgb.fit(X_train, y_train)
 
                     y_pred_xgb = calibrated_xgb.predict_proba(X_test)[:, 1]
