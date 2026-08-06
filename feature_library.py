@@ -186,4 +186,24 @@ def calculate_features_for_shotgun(df):
 
 def calculate_features_and_signals(df):
     """Legacy compatibility wrapper for V6.5 feature store."""
-    return calculate_features_for_shotgun(df)
+    features = calculate_features_for_shotgun(df)
+    
+    # Re-calculate individual legacy columns for database insertion compatibility
+    features['prev_close'] = features['close'].shift(1)
+    features['prev_ema_50'] = features['ema_50'].shift(1)
+    features['primary_trend_long'] = np.where((features['prev_close'] <= features['prev_ema_50']) & (features['close'] > features['ema_50']) & (features['ema_50'] > features['ema_200']), 1, 0)
+    features['primary_trend_short'] = np.where((features['prev_close'] >= features['prev_ema_50']) & (features['close'] < features['ema_50']) & (features['ema_50'] < features['ema_200']), 1, 0)
+    
+    sma_20 = features['close'].rolling(window=20).mean()
+    std_20 = features['close'].rolling(window=20).std()
+    bb_squeeze_thresh = features['bb_width'].expanding(min_periods=100).quantile(0.10)
+    is_squeeze = features['bb_width'].shift(1) < bb_squeeze_thresh
+    upper_band, lower_band = sma_20 + (std_20 * 2), sma_20 - (std_20 * 2)
+    features['primary_breakout_long'] = np.where(is_squeeze & (features['close'] > upper_band), 1, 0)
+    features['primary_breakout_short'] = np.where(is_squeeze & (features['close'] < lower_band), 1, 0)
+    
+    price_zscore = calculate_zscore(features['close'], 200)
+    features['primary_reversion_long'] = np.where(price_zscore < -3.0, 1, 0)
+    features['primary_reversion_short'] = np.where(price_zscore > 3.0, 1, 0)
+    
+    return features
