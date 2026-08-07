@@ -472,7 +472,7 @@ class AlphaQuantSCALPER_HUNT:
         load_state()
 
         # Load optimal thresholds overrides if available
-        opt_file = "optimal_thresholds.json"
+        opt_file = os.path.join("scalper_hunt", "optimal_thresholds.json")
         if os.path.exists(opt_file):
             try:
                 with open(opt_file, 'r') as f:
@@ -486,7 +486,7 @@ class AlphaQuantSCALPER_HUNT:
 
         # Load optimal HTF rule overrides if available
         self.optimal_htf_rules = {}
-        opt_htf_file = "optimal_htf_rules.json"
+        opt_htf_file = os.path.join("scalper_hunt", "optimal_htf_rules.json")
         if os.path.exists(opt_htf_file):
             try:
                 with open(opt_htf_file, 'r') as f:

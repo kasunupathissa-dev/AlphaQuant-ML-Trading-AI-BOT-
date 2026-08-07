@@ -92,9 +92,10 @@ TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Scout settings
-SCOUT_INTERVAL_SECONDS = 3600    # Run full scan every 1 hour
-MIN_AI_PROB_TO_SEND    = 45.0   # Skip cards where max(long_prob, short_prob) < 45%
-BRAIN_DIR              = "."    # Directory where *_brain.pkl files live
+SCOUT_INTERVAL_SECONDS = 900     # Run full scan every 15 minutes (stays in sync with 15m candles)
+TOP_COINS_TO_SEND      = 3      # Only Telegram the top N coins by AI win probability
+MIN_AI_PROB_TO_SEND    = 45.0  # Ignore coins where max(long_prob, short_prob) < 45%
+BRAIN_DIR              = "."   # Directory where *_brain.pkl files live
 
 # Global flag for on-demand /scan trigger
 scan_now_flag = None
@@ -315,9 +316,11 @@ def build_insight_card(asset: str, brain_pack: dict, last: pd.Series,
 
 
 async def run_scout_cycle(brains: dict, exchange):
-    """Run one full scan across all assets and send Telegram insight cards."""
+    """Scan all assets, rank by AI win probability, send top 3 insight cards."""
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] === MANUAL SCOUT CYCLE STARTED ===")
-    sent = 0
+
+    # Phase 1: collect scores for all assets silently
+    ranked = []  # list of (max_prob, asset, card_str)
 
     for asset in config.TARGET_ASSETS:
         if asset not in brains:
@@ -344,8 +347,8 @@ async def run_scout_cycle(brains: dict, exchange):
             funding_df = funding_df.set_index('timestamp').resample(resample_rule).last()
             oi_df      = oi_df.set_index('timestamp').resample(resample_rule).last()
             z_period   = 120 if config.TIMEFRAME == "15m" else 30
-            funding_df['funding_rate_zscore'] = calculate_zscore(funding_df['fundingRate'],          z_period)
-            oi_df['oi_zscore']               = calculate_zscore(oi_df['openInterestAmount'],         z_period)
+            funding_df['funding_rate_zscore'] = calculate_zscore(funding_df['fundingRate'],        z_period)
+            oi_df['oi_zscore']               = calculate_zscore(oi_df['openInterestAmount'],       z_period)
 
             feature_df['datetime'] = pd.to_datetime(feature_df['timestamp'], unit='ms')
             feature_df = feature_df.set_index('datetime')
@@ -369,17 +372,49 @@ async def run_scout_cycle(brains: dict, exchange):
             card = build_insight_card(asset, brains[asset], last, df, long_thresh, short_thresh)
 
             if card:
-                send_telegram(card)
-                print(f"  [SENT] {asset}: Insight card delivered.")
-                sent += 1
-                await asyncio.sleep(1.5)    # avoid Telegram rate limit
+                # Extract the AI prob that was used for ranking (max of long/short)
+                features_list = brains[asset]['features']
+                X = pd.DataFrame([last[features_list]], columns=features_list)
+                probs = brains[asset]['model'].predict_proba(X)[0]
+                max_prob = max(probs[1] * 100, probs[0] * 100)
+                ranked.append((max_prob, asset, card))
+                print(f"  [SCORED] {asset}: {max_prob:.1f}% AI prob")
             else:
-                print(f"  [SKIP] {asset}: Below MIN_AI_PROB threshold.")
+                print(f"  [SKIP] {asset}: Below MIN-AI-PROB threshold.")
 
         except Exception as e:
             print(f"  [ERROR] {asset}: {e}")
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scout cycle complete. Sent {sent}/{len(config.TARGET_ASSETS)} cards.")
+    # Phase 2: sort by AI probability descending, send top N
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    top_n = ranked[:TOP_COINS_TO_SEND]
+
+    if not top_n:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] No qualifying coins this cycle.")
+        return
+
+    # Send a header summary first
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    summary_lines = []
+    for rank_i, (prob, asset, _) in enumerate(top_n, 1):
+        ticker = asset.replace("/", "-")
+        summary_lines.append(f"  {rank_i}. *{ticker}*  `{prob:.1f}%`")
+    summary_msg = (
+        f"\U0001f3af *[MANUAL SCOUT] Top {TOP_COINS_TO_SEND} Opportunities*\n"
+        f"{'=' * 32}\n"
+        + "\n".join(summary_lines)
+        + f"\n\n_Sending full insight cards now..._\n_Scanned: {ts}_"
+    )
+    send_telegram(summary_msg)
+    await asyncio.sleep(1.5)
+
+    # Send full card for each top coin
+    for prob, asset, card in top_n:
+        send_telegram(card)
+        print(f"  [SENT] {asset}: Insight card delivered. (AI: {prob:.1f}%)")
+        await asyncio.sleep(1.5)
+
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scout cycle complete. Sent top {len(top_n)}/{len(config.TARGET_ASSETS)} coins.")
 
 
 def load_brains() -> dict:
