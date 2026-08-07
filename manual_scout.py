@@ -71,6 +71,22 @@ class ManualCalibratedClassifier(BaseEstimator, ClassifierMixin):
             
         return self
 
+    def predict_proba(self, X):
+        raw_probs = self.estimator_.predict_proba(X)
+        calibrated_probs = np.zeros_like(raw_probs)
+        
+        for i, calibrator in enumerate(self.calibrators_):
+            calibrated_probs[:, i] = calibrator.predict(raw_probs[:, i])
+            
+        row_sums = calibrated_probs.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        calibrated_probs = calibrated_probs / row_sums
+        return calibrated_probs
+        
+    def predict(self, X):
+        probs = self.predict_proba(X)
+        return self.classes_[np.argmax(probs, axis=1)]
+
 # Telegram credentials
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -85,11 +101,11 @@ scan_now_flag = None
 
 
 def send_telegram(msg: str):
-    """Send a Telegram message, replacing underscores to avoid Markdown errors."""
+    """Send a Telegram message, escaping underscores to avoid Markdown errors."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("[WARNING] Telegram secrets not set.")
         return
-    safe = msg.replace("_", "-")
+    safe = msg.replace("_", "\\_")
     try:
         url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         resp = requests.post(
