@@ -111,10 +111,11 @@ def train_shotgun_models():
             print(f"  [SKIP] Insufficient or non-diverse triggered signals data for {asset} (Rows: {len(df)}). Skipping.")
             continue
 
-        # Expanded Technical Indicator Pool (DTIP) + Chop Index
+        # Expanded Technical Indicator Pool (DTIP) + Chop Index + Microstructure Features
         features = [
             'dist_ema_50', 'dist_ema_200', 'atr_pct', 'volume_zscore', 'adx_14', 'bb_width',
-            'funding_rate_zscore', 'oi_zscore', 'rsi_14', 'macd_hist', 'supertrend_direction', 'chop_index'
+            'funding_rate_zscore', 'oi_zscore', 'rsi_14', 'macd_hist', 'supertrend_direction', 'chop_index',
+            'rvol', 'atr_compression'
         ]
         X = df[features]
         y = df['target_label']
