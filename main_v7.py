@@ -142,6 +142,8 @@ telemetry_timer = time.time()
 asset_recent_results = {asset: [] for asset in config.TARGET_ASSETS} 
 asset_penalty_box = {} 
 signal_funnel = {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0}
+last_heartbeat_time = 0.0   # Track when last 24h Telegram heartbeat was sent
+total_scan_cycles = 0       # Total inference cycles run since startup
 trade_mode = "BOTH"
 rejected_signal_tracker = []
 last_audit_time = time.time()
@@ -261,7 +263,7 @@ last_state_load_time = 0
 last_state_mtime = 0
 
 def load_state(force=False):
-    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time, last_state_mtime, rejected_signal_tracker, last_audit_time
+    global asset_penalty_box, asset_recent_results, active_trades, signal_funnel, trade_mode, last_state_load_time, last_state_mtime, rejected_signal_tracker, last_audit_time, last_heartbeat_time, total_scan_cycles
     
     if not os.path.exists(config.STATE_FILE):
         return
@@ -901,6 +903,7 @@ class AlphaQuantV8_2:
         save_state()
 
     async def ml_inference_loop(self):
+        global total_scan_cycles, last_heartbeat_time
         first_run = True
         while self.running:
             try:
@@ -916,6 +919,22 @@ class AlphaQuantV8_2:
                 self.audit_rejected_signals()
                 if time.time() - last_audit_time >= 3600:
                     self.send_hourly_audit_summary()
+
+                # 🟢 24-Hour Heartbeat: Send a status ping to Telegram even if no signals fire
+                if time.time() - last_heartbeat_time >= 86400:
+                    last_heartbeat_time = time.time()
+                    hb_msg = (
+                        f"💓 *[AlphaQuant V8.2] Daily Heartbeat*\n"
+                        f"• Bot is *ALIVE* and scanning normally.\n"
+                        f"• *Total Scan Cycles Since Restart*: `{total_scan_cycles}`\n"
+                        f"• *Signal Funnel*: Generated `{signal_funnel['generated']}` | "
+                        f"Rejected Threshold `{signal_funnel['rejected_threshold']}` | "
+                        f"Rejected Regime `{signal_funnel['rejected_regime']}` | "
+                        f"Executed `{signal_funnel['executed']}`\n"
+                        f"• *Active Trades*: `{len(active_trades)}`\n"
+                        f"• *Penalty Box*: `{list(asset_penalty_box.keys()) or 'None'}`"
+                    )
+                    send_telegram_message(hb_msg)
                     
                 # --- Time-of-Day Performance Filter ---
                 local_time = get_local_time()
@@ -930,7 +949,8 @@ class AlphaQuantV8_2:
                     continue
                 
                 load_state()
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting V8.2 Shotgun Inference Cycle on {len(brains)} assets...")
+                total_scan_cycles += 1
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting V8.2 Shotgun Inference Cycle on {len(brains)} assets... (Cycle #{total_scan_cycles})")
 
                 for asset in brains.keys():
                     if asset in asset_penalty_box:
@@ -985,6 +1005,7 @@ class AlphaQuantV8_2:
                         # Check if a primary technical signal is triggered at the last closed bar
                         primary_sig = int(last_closed['primary_signal'])
                         if primary_sig not in [0, 1]:
+                            print(f"  [SCAN] {asset}: No setup triggered (primary_signal=-1, win_prob not evaluated)")
                             continue
                             
                         direction = "LONG" if primary_sig == 1 else "SHORT"
@@ -1333,6 +1354,7 @@ class AlphaQuantV8_2:
                             # 🟢 V8.5 Funnel: Increment threshold rejection counter
                             signal_funnel["rejected_threshold"] += 1
                             save_state()
+                            print(f"  [REJECT LOW_PROB] {asset} {direction}: win_prob={win_prob:.2f}% < threshold={threshold:.2f}% | Regime={regime}. Sending Telegram notification.")
                             msg = (
                                 f"⚠️ *[AlphaQuant V8.2] SIGNAL REJECTED (LOW PROBABILITY)*\n"
                                 f"• *Asset*: {asset} | *Direction*: {direction}\n"
