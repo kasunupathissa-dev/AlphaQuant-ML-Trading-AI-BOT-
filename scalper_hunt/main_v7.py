@@ -749,7 +749,26 @@ class AlphaQuantSCALPER_HUNT:
                     pnl = trade.get('locked_pnl', 0.0) + remaining_pnl
                     result = "PROFIT" if pnl >= 0 else "LOSS"
                     trade.update({'status': result, 'pnl': pnl})
-                
+
+                    # Compute hold duration
+                    entry_time = trade.get('entry_time', time.time())
+                    hold_seconds = int(time.time() - entry_time)
+                    hold_mins = hold_seconds // 60
+                    hold_hrs = hold_mins // 60
+                    hold_str = f"{hold_hrs}h {hold_mins % 60}m" if hold_hrs > 0 else f"{hold_mins}m"
+
+                    # Determine exit reason (TP or SL)
+                    if trade['direction'] == "LONG":
+                        exit_reason = "✅ TAKE PROFIT" if current_price >= trade['tp'] else "🛑 STOP LOSS (Trailing)" if trade.get('trailing_active') else "🛑 STOP LOSS"
+                    else:
+                        exit_reason = "✅ TAKE PROFIT" if current_price <= trade['tp'] else "🛑 STOP LOSS (Trailing)" if trade.get('trailing_active') else "🛑 STOP LOSS"
+
+                    # Compute planned R:R vs achieved
+                    planned_risk = abs(trade['entry'] - trade.get('original_sl', trade['sl']))
+                    achieved_gain = abs(current_price - trade['entry'])
+                    achieved_rr = round(achieved_gain / planned_risk, 2) if planned_risk > 0 else 0.0
+                    ai_prob = trade.get('ai_prob', 0.0)
+
                     # Execute Testnet order on exit (opposite direction)
                     exit_direction = 'SHORT' if trade['direction'] == 'LONG' else 'LONG'
                     try:
@@ -769,14 +788,17 @@ class AlphaQuantSCALPER_HUNT:
                     if len(asset_recent_results[symbol]) > 5: asset_recent_results[symbol].pop(0)
                 
                     status_icon = "🟢" if result == "PROFIT" else "🔴"
+                    print(f"  [TRADE CLOSED {result}] {symbol} {trade['direction']} | PnL: ${pnl:+.2f} | Exit: {exit_reason} | Held: {hold_str} | AI: {ai_prob:.1f}%")
+
                     msg = (
-                        f"{status_icon} 🔔 *[SCALPER_HUNT] TRADE CLOSED*\n"
+                        f"{status_icon} 🔔 *[SCALPER-HUNT] TRADE CLOSED — {result}*\n"
                         f"• *Asset*: {symbol} | *Direction*: {trade['direction']}\n"
-                        f"• *Status*: *{result}* | *Net PnL*: *${pnl:+.2f}*\n"
-                        f"• *Entry Price*: ${trade['entry']:,.4f}\n"
-                        f"• *Exit Price*: ${current_price:,.4f}\n"
-                        f"• *Take Profit (TP)*: ${trade['tp']:,.4f}\n"
-                        f"• *Stop Loss (SL)*: ${trade['sl']:,.4f}"
+                        f"• *Exit Reason*: {exit_reason}\n"
+                        f"• *Net PnL*: *${pnl:+.2f}*\n"
+                        f"• *Entry*: `${trade['entry']:,.4f}` → *Exit*: `${current_price:,.4f}`\n"
+                        f"• *TP Target*: `${trade['tp']:,.4f}` | *SL Level*: `${trade['sl']:,.4f}`\n"
+                        f"• *Achieved R:R*: `1:{achieved_rr:.2f}` | *AI Win Prob*: `{ai_prob:.1f}%`\n"
+                        f"• *Hold Duration*: `{hold_str}`"
                     )
                 
                     if len(asset_recent_results[symbol]) >= 2 and sum(asset_recent_results[symbol][-2:]) == 0:
@@ -1306,6 +1328,7 @@ class AlphaQuantSCALPER_HUNT:
                                 "asset": asset, "direction": direction, "entry": entry_price, "sl": sl, "tp": tp, 
                                 "status": "OPEN", "ai_prob": win_prob, "position_size": position_size, "pnl": 0.0,
                                 "entry_time": time.time(),
+                                "original_sl": sl,  # Preserved for R:R calculation at close (SL may trail)
                                 "signal_type": signal_type,
                                 "entry_atr": atr_val,
                                 "highest_price": entry_price,
