@@ -1242,6 +1242,15 @@ class AlphaQuantV8_2:
                                 base_risk = base_risk * 0.5
                                 
                             target_risk = base_risk * confidence_factor * volatility_factor
+                            
+                            # 🟢 Suggestion 1: Apply Volatility Squeeze Risk Multiplier
+                            # When atr_compression is below 0.45, we boost risk by 1.25x due to high momentum probability.
+                            if 'atr_compression' in last_closed:
+                                atr_comp = float(last_closed['atr_compression'])
+                                if atr_comp < 0.45:
+                                    target_risk = target_risk * 1.25
+                                    print(f"  [SQUEEZE POSITION SIZE BOOST] {asset} compression: {atr_comp:.3f} < 0.45. Applying 1.25x risk boost.")
+
                             # Cap absolute risk per trade at 2.0x base_risk to prevent over-exposure
                             target_risk = min(target_risk, base_risk * 2.0)
                             

@@ -1,14 +1,12 @@
 import asyncio
 import ccxt.pro as ccxtpro
 import pandas as pd
-import sqlite3
 import time
 from datetime import datetime
 import json
-
-DB_NAME = "alphaquant_ml_v4.db"
-
-from config import TARGET_ASSETS
+import config
+from database_config import get_db_engine
+from sqlalchemy import text
 
 class AsyncMarketDataEngine:
     def __init__(self):
@@ -26,7 +24,7 @@ class AsyncMarketDataEngine:
         self.live_orderbooks = {}
         
         print("==================================================")
-        print("  ALPHAQUANT V4.0: ASYNC I/O WEBSOCKET ENGINE     ")
+        print("  ALPHAQUANT V8.2: ASYNC WEBSOCKET INGESTION      ")
         print("==================================================")
 
     async def watch_ticker_stream(self, symbol):
@@ -56,13 +54,13 @@ class AsyncMarketDataEngine:
             try:
                 orderbook = await self.exchange.watch_order_book(symbol, limit=20)
                 
-                # Calculate real-time bid/ask ratio
+                # Calculate real-time bid/ask ratio (top 10 levels)
                 bids = orderbook['bids']
                 asks = orderbook['asks']
                 
                 if bids and asks:
-                    bid_vol = sum(b[1] for b in bids)
-                    ask_vol = sum(a[1] for a in asks)
+                    bid_vol = sum(b[1] for b in bids[:10])
+                    ask_vol = sum(a[1] for a in asks[:10])
                     imbalance = bid_vol / ask_vol if ask_vol > 0 else 1.0
                     
                     self.live_orderbooks[symbol] = {
@@ -77,7 +75,7 @@ class AsyncMarketDataEngine:
     async def save_snapshots_to_db(self):
         """
         Periodically takes the ultra-fast in-memory websocket data
-        and commits a snapshot to the SQLite database for ML processing.
+        and commits a snapshot to the MySQL database.
         """
         while self.running:
             # Wait 60 seconds between snapshots
@@ -86,46 +84,51 @@ class AsyncMarketDataEngine:
             if not self.live_prices:
                 continue
                 
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Saving Async Market Snapshot to Database...")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Saving Async Market Snapshot to MySQL...")
             
             try:
-                conn = sqlite3.connect(DB_NAME)
-                cursor = conn.cursor()
-                
-                # Create a specialized table for high-frequency snapshots
-                cursor.execute('''
-                CREATE TABLE IF NOT EXISTS hft_snapshots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    asset TEXT NOT NULL,
-                    timestamp INTEGER NOT NULL,
-                    price REAL,
-                    ob_imbalance REAL,
-                    spread REAL
-                )
-                ''')
-                
+                engine = get_db_engine()
+                if engine is None:
+                    print("[WARNING] MySQL Database engine is not available. Skipping snapshot.")
+                    continue
+
                 current_time = int(time.time() * 1000)
-                records = []
                 
-                for asset in TARGET_ASSETS:
-                    if asset in self.live_prices:
-                        price = self.live_prices[asset]
-                        ob_data = self.live_orderbooks.get(asset, {'imbalance': 1.0, 'spread': 0.0})
-                        
-                        records.append((
-                            asset, current_time, price, 
-                            ob_data['imbalance'], ob_data['spread']
-                        ))
-                
-                if records:
-                    cursor.executemany('''
-                        INSERT INTO hft_snapshots (asset, timestamp, price, ob_imbalance, spread)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', records)
+                with engine.connect() as conn:
+                    # Create a specialized table for high-frequency snapshots in MySQL
+                    conn.execute(text('''
+                    CREATE TABLE IF NOT EXISTS hft_snapshots (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        asset VARCHAR(20) NOT NULL,
+                        timestamp BIGINT NOT NULL,
+                        price DOUBLE,
+                        ob_imbalance DOUBLE,
+                        spread DOUBLE,
+                        INDEX idx_asset_timestamp (asset, timestamp)
+                    )
+                    '''))
                     conn.commit()
-                    print(f"  -> Snapshot saved for {len(records)} assets.")
-                    
-                conn.close()
+
+                    saved_count = 0
+                    for asset in config.TARGET_ASSETS:
+                        if asset in self.live_prices:
+                            price = self.live_prices[asset]
+                            ob_data = self.live_orderbooks.get(asset, {'imbalance': 1.0, 'spread': 0.0})
+                            
+                            conn.execute(text('''
+                                INSERT INTO hft_snapshots (asset, timestamp, price, ob_imbalance, spread)
+                                VALUES (:asset, :timestamp, :price, :ob_imbalance, :spread)
+                            '''), {
+                                'asset': asset,
+                                'timestamp': current_time,
+                                'price': price,
+                                'ob_imbalance': ob_data['imbalance'],
+                                'spread': ob_data['spread']
+                            })
+                            saved_count += 1
+                            
+                    conn.commit()
+                    print(f"  -> MySQL Snapshot saved for {saved_count} assets.")
                 
             except Exception as e:
                 print(f"[ERROR] Failed to save snapshot: {e}")
@@ -140,7 +143,7 @@ class AsyncMarketDataEngine:
         tasks = []
         
         # Launch a ticker stream and an orderbook stream for EVERY asset simultaneously
-        for asset in TARGET_ASSETS:
+        for asset in config.TARGET_ASSETS:
             tasks.append(self.watch_ticker_stream(asset))
             tasks.append(self.watch_orderbook_stream(asset))
             
