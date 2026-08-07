@@ -65,6 +65,7 @@ class V7_FeatureStore:
                 dist_ema_50 DOUBLE, dist_ema_200 DOUBLE, atr_pct DOUBLE, volume_zscore DOUBLE, adx_14 DOUBLE, bb_width DOUBLE,
                 funding_rate_zscore DOUBLE, oi_zscore DOUBLE,
                 rsi_14 DOUBLE, macd_hist DOUBLE, supertrend_direction DOUBLE, chop_index DOUBLE,
+                rvol DOUBLE, atr_compression DOUBLE,
                 primary_signal INT, trigger_category INT,
                 target_label INT,
                 UNIQUE INDEX idx_asset_timestamp (asset, timestamp)
@@ -101,7 +102,7 @@ class V7_FeatureStore:
                 columns_to_insert = [
                     'asset', 'timestamp', 'dist_ema_50', 'dist_ema_200', 'atr_pct', 'volume_zscore', 'adx_14', 'bb_width',
                     'funding_rate_zscore', 'oi_zscore', 'rsi_14', 'macd_hist', 'supertrend_direction', 'chop_index',
-                    'primary_signal', 'trigger_category'
+                    'rvol', 'atr_compression', 'primary_signal', 'trigger_category'
                 ]
                 insert_df = final_df.reset_index()[columns_to_insert]
 
