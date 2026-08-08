@@ -315,14 +315,56 @@ def build_insight_card(asset: str, brain_pack: dict, last: pd.Series,
     return msg
 
 
+def get_active_positions():
+    """Retrieve all asset symbols with currently open trades from both bot state files."""
+    active_assets = set()
+    
+    # 1. Sniper state file
+    sniper_state = "live_engine_state.json"
+    if os.path.exists(sniper_state):
+        try:
+            with open(sniper_state, 'r') as f:
+                data = json.load(f)
+            for t in data.get("active_trades", []):
+                if str(t.get("status", "")).upper() == "OPEN":
+                    active_assets.add(t.get("asset"))
+        except Exception as e:
+            print(f"[WARNING] Failed to read sniper state: {e}")
+
+    # 2. Scalper state file
+    scalper_state = "/home/kasun/repository/AlphaQuant-SCALPER-HUNT/live_engine_state_scalper.json"
+    if not os.path.exists(scalper_state):
+        scalper_state = "../AlphaQuant-SCALPER-HUNT/live_engine_state_scalper.json"
+        
+    if os.path.exists(scalper_state):
+        try:
+            with open(scalper_state, 'r') as f:
+                data = json.load(f)
+            for t in data.get("active_trades", []):
+                if str(t.get("status", "")).upper() == "OPEN":
+                    active_assets.add(t.get("asset"))
+        except Exception as e:
+            print(f"[WARNING] Failed to read scalper state: {e}")
+            
+    return active_assets
+
+
 async def run_scout_cycle(brains: dict, exchange):
     """Scan all assets, rank by AI win probability, send top 3 insight cards."""
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] === MANUAL SCOUT CYCLE STARTED ===")
+
+    # Get active positions to prevent duplicate exposure
+    active_positions = get_active_positions()
+    if active_positions:
+        print(f"  [INFO] Active positions excluded: {active_positions}")
 
     # Phase 1: collect scores for all assets silently
     ranked = []  # list of (max_prob, asset, card_str)
 
     for asset in config.TARGET_ASSETS:
+        if asset in active_positions:
+            print(f"  [SKIP] {asset}: Already has an active open position.")
+            continue
         if asset not in brains:
             print(f"  [SKIP] {asset}: No brain loaded.")
             continue
@@ -422,13 +464,19 @@ def load_brains() -> dict:
     for asset in config.TARGET_ASSETS:
         fname = os.path.join(BRAIN_DIR, asset.replace("/", "_") + "_brain.pkl")
         if os.path.exists(fname):
-            try:
-                data = joblib.load(fname)
-                if 'model' in data and 'features' in data:
-                    brains[asset] = data
-                    print(f"[INFO] Loaded brain: {asset}")
-            except Exception as e:
-                print(f"[WARNING] Could not load {fname}: {e}")
+            # Try loading up to 3 times to handle concurrent write collisions safely
+            for attempt in range(3):
+                try:
+                    data = joblib.load(fname)
+                    if 'model' in data and 'features' in data:
+                        brains[asset] = data
+                        print(f"[INFO] Loaded brain: {asset}")
+                        break
+                except Exception as e:
+                    if attempt < 2:
+                        time.sleep(0.5)
+                    else:
+                        print(f"[WARNING] Could not load brain {fname} after 3 attempts: {e}")
     return brains
 
 
