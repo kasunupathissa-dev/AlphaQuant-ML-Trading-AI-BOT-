@@ -1,0 +1,36 @@
+SOL/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.0
+SUI/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.0
+NEAR/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 0.75
+DOGE/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.0
+XRP/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.25
+LINK/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.0
+AVAX/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.25
+DOT/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 0.75
+HBAR/USDT:
+  long_threshold: 65.0
+  short_threshold: 60.0
+  risk_factor: 1.0

@@ -200,12 +200,14 @@ def build_insight_card(asset: str, brain_pack: dict, last: pd.Series,
         ai_prob     = short_prob
         threshold   = short_thresh
 
+    # Strict accuracy filtering: Only send if within 3% of the bot's dynamic threshold
+    if ai_prob < threshold - 3.0:
+        return ""
+
     if ai_prob >= threshold:
-        thresh_badge = "ABOVE BOT THRESHOLD - Bot may also auto-trade"
-    elif ai_prob >= threshold - 10:
-        thresh_badge = "NEAR BOT THRESHOLD - Manual opportunity"
+        thresh_badge = "ABOVE BOT THRESHOLD - High accuracy auto-trade"
     else:
-        thresh_badge = "BELOW BOT THRESHOLD - Your analysis required"
+        thresh_badge = "NEAR BOT THRESHOLD - Manual opportunity"
 
     # Indicators
     rsi       = float(last.get('rsi_14',              50))

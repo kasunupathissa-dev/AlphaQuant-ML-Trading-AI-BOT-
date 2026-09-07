@@ -8,9 +8,10 @@ STATE_FILE = "live_engine_state.json"
 LIVE_TRADING_ENABLED = False
 
 # --- Binance Futures Testnet (Demo Trading) Settings ---
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "X0djHJJWnlj5ynaZvVKdiq0krjTVr9i5m42f0YS9WJaMr7tIZfKTahj1pAStliSc")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "pG1xQQLlZDWiImnMJnWCKX9MdvtYL1kiS1IG5d2HHqDbsPDSkGKMBVqEvD1MoMjF")
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
+BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "")
 USE_TESTNET = os.getenv("USE_TESTNET", "True").lower() in ("true", "1", "yes")
+
 
 # --- Timeframe Settings ---
 TIMEFRAME = "15m"  # "15m" or "1h"
@@ -38,6 +39,7 @@ TARGET_ASSETS = [
 # 🟢 V8.5 Upgrade: System timezone synchronization & estimated transaction fee percentage
 TIMEZONE = "Europe/Stockholm"
 ESTIMATED_FEE_PCT = 0.0008
+INITIAL_BALANCE = 100.0
 RISK_PER_TRADE_USD = 5.0
 MAX_ACTIVE_TRADES = 3
 MAX_POSITION_SIZE_USD = 500.0
@@ -99,3 +101,19 @@ MULTITIMEFRAME_VETO_ENABLED = True
 # Enable/Disable market regime adaptive confidence threshold adjustments
 REGIME_ADAPTIVE_THRESHOLD_ENABLED = True
 
+# --- Dynamic Overrides from Auto-Tuner ---
+import json
+overrides_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dynamic_overrides.json")
+if os.path.exists(overrides_path):
+    try:
+        with open(overrides_path, "r") as f:
+            overrides = json.load(f)
+            if "ASSET_RISK_TIERS" in overrides:
+                for k, v in overrides["ASSET_RISK_TIERS"].items():
+                    ASSET_RISK_TIERS[k] = v
+            if "EXCLUDED_ASSETS" in overrides:
+                for asset in overrides["EXCLUDED_ASSETS"]:
+                    if asset in TARGET_ASSETS:
+                        TARGET_ASSETS.remove(asset)
+    except Exception as e:
+        print(f"[WARNING] Failed to load dynamic overrides in config: {e}")

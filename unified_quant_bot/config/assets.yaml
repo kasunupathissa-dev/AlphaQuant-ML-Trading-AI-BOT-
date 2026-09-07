@@ -1,0 +1,71 @@
+assets:
+  SOL/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.0
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  NEAR/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 0.75
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  SUI/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.0
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  HBAR/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.0
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  XRP/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.25
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  LINK/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.0
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  AVAX/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.25
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  DOGE/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 1.0
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+  DOT/USDT:
+    confidence_threshold_long: 65.0
+    confidence_threshold_short: 60.0
+    risk_factor: 0.75
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 2.25
+
+global_limits:
+  max_concurrent_positions: 3
+  max_portfolio_risk_pct: 3.0
+  max_spread_pct: 0.15
+  daily_drawdown_limit_pct: 2.5
+  min_rrr: 1.5
+  stale_feed_timeout_seconds: 120

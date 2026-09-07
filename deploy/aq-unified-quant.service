@@ -1,0 +1,16 @@
+[Unit]
+Description=AlphaQuant Unified Institutional Quantitative Trading Bot Service
+After=network.target redis-server.service postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-
+ExecStart=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/aq_env/bin/python3 /home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/unified_quant_bot/main.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -20,3 +20,15 @@ logs/*
 .vscode/
 .idea/
 .DS_Store
+
+# Secrets and Credentials
+.env
+.env*
+*.pem
+*.key
+
+# Backups & Temp files
+backups/
+scratch/
+tmp/
+

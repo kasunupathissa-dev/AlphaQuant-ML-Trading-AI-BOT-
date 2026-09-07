@@ -58,9 +58,7 @@ ExecStart=$TARGET_DIR/aq_env/bin/python3 main_v7.py
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
-Environment=TELEGRAM_TOKEN=8881201037:AAEYhqFD0d2FZ5W1l6uq3kb4Vuv385jGc34
-Environment=TELEGRAM_CHAT_ID=6649046952
-Environment=DB_PASS=StrongPassword123!
+EnvironmentFile=$REPO_DIR/.env
 
 [Install]
 WantedBy=multi-user.target

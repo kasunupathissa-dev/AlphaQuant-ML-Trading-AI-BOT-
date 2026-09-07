@@ -285,6 +285,9 @@ def load_state(force=False):
         with open(config.STATE_FILE, 'r') as f: state = json.load(f)
         asset_penalty_box = state.get("asset_penalty_box", {})
         asset_recent_results = state.get("asset_recent_results", {asset: [] for asset in config.TARGET_ASSETS})
+        for asset in config.TARGET_ASSETS:
+            if asset not in asset_recent_results:
+                asset_recent_results[asset] = []
         active_trades = state.get("active_trades", [])
         signal_funnel = state.get("signal_funnel", {"generated": 0, "rejected_regime": 0, "rejected_threshold": 0, "executed": 0})
         trade_mode = state.get("trade_mode", "BOTH")
@@ -385,7 +388,11 @@ def log_trade_features_to_csv(trade):
         writer.writerow(row)
 
 async def execute_testnet_order(exchange, symbol, direction, amount, close_full=False):
-    if not getattr(config, 'USE_TESTNET', False) or not getattr(config, 'BINANCE_API_KEY', ''):
+    if not getattr(config, 'LIVE_TRADING_ENABLED', False):
+        print(f"[PAPER] Simulating {direction} order for {amount:.6f} {symbol}")
+        return "PAPER_ORDER_ID"
+    if not getattr(config, 'BINANCE_API_KEY', ''):
+        print("[WARNING] Live trading enabled but BINANCE_API_KEY is not set!")
         return None
     try:
         side = 'buy' if direction == 'LONG' else 'sell'
@@ -918,7 +925,7 @@ class AlphaQuantV8_2:
             f"• *Capital Saved / Avoided*: *{capital_saved:+.2f} USD*\n\n"
             f"*Audited Signals Details*:\n{details_str}"
         )
-        send_telegram_message(msg)
+        # send_telegram_message(msg)
         
         last_audit_time = current_time
         rejected_signal_tracker = [sig for sig in rejected_signal_tracker if sig["status"] == "PENDING"]
@@ -956,7 +963,8 @@ class AlphaQuantV8_2:
                         f"• *Active Trades*: `{len(active_trades)}`\n"
                         f"• *Penalty Box*: `{list(asset_penalty_box.keys()) or 'None'}`"
                     )
-                    send_telegram_message(hb_msg)
+                    # send_telegram_message(hb_msg)
+                    pass
                     
                 # --- Time-of-Day Performance Filter ---
                 local_time = get_local_time()
@@ -1404,6 +1412,14 @@ class AlphaQuantV8_2:
             except asyncio.CancelledError: break
 
     async def run(self):
+        # Pre-load markets explicitly to prevent lazy-load KeyErrors
+        try:
+            await self.exchange_pro.load_markets()
+            await asyncio.to_thread(self.exchange_reg.load_markets)
+            print("[SUCCESS] CCXT markets pre-loaded successfully.")
+        except Exception as e:
+            print(f"[WARNING] Failed to pre-load CCXT markets: {e}")
+            
         await self.reconcile_open_positions()
         print("[SYSTEM] Booting V8.2 Asynchronous Event Loop...")
         self.tasks.append(asyncio.create_task(self.watch_all_tickers()))

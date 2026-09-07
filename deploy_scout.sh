@@ -26,8 +26,7 @@ ExecStart=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/aq_env/bin/python
 Restart=always
 RestartSec=15
 Environment=PYTHONUNBUFFERED=1
-Environment=TELEGRAM_TOKEN=8881201037:AAEYhqFD0d2FZ5W1l6uq3kb4Vuv385jGc34
-Environment=TELEGRAM_CHAT_ID=6649046952
+EnvironmentFile=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/.env
 
 [Install]
 WantedBy=multi-user.target

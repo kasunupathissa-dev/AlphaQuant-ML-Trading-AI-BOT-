@@ -1,0 +1,19 @@
+[Unit]
+Description=AlphaQuant Asynchronous Event-Driven Quantitative Trading Bot Service
+After=network.target postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=kasun
+WorkingDirectory=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-
+Environment=PYTHONPATH=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-
+Environment=PYTHONUNBUFFERED=1
+Environment=SIMULATION_MODE=True
+ExecStart=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/aq_env/bin/python3 /home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/ai_quant_bot/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

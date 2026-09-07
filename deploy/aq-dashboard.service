@@ -1,0 +1,15 @@
+[Unit]
+Description=AlphaQuant Web Dashboard UI Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-
+ExecStart=/home/kasun/repository/AlphaQuant-ML-Trading-AI-BOT-/aq_env/bin/python3 dashboard_app.py 8080
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
