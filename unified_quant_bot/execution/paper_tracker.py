@@ -306,6 +306,7 @@ class PaperTracker:
                 # Deduct simulated 0.10% taker fee roundtrip
                 gross_pnl = (exit_price - entry) * quantity if direction == "LONG" else (entry - exit_price) * quantity
                 fee_deduction = (entry * quantity * 0.0005) + (exit_price * quantity * 0.0005)
+                net_pnl = gross_pnl - fee_deduction
                 final_status = "PROFIT" if net_pnl > 0 else "LOSS"
                 pos["status"] = final_status
                 pos["exit_price"] = exit_price

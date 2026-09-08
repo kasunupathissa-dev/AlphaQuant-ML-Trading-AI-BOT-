@@ -55,6 +55,7 @@ from unified_quant_bot.monitoring.telegram_gateway import TelegramGateway
 from unified_quant_bot.models.ensemble_brain import MetaLabelingFilter
 from unified_quant_bot.monitoring.drift_monitor import ModelDriftMonitor
 from unified_quant_bot.monitoring.whale_signal_tracker import WhaleSignalTracker
+from unified_quant_bot.monitoring.hourly_summary_engine import HourlySummaryEngine
 from unified_quant_bot.data.lead_trader_collector import LeadTraderCollector
 from unified_quant_bot.data.hyperliquid_collector import HyperliquidWhaleCollector
 
@@ -69,6 +70,7 @@ pump_scanner = PumpScanner()
 meta_filter = MetaLabelingFilter(min_meta_confidence=65.0)
 drift_monitor = ModelDriftMonitor(window_size=50, brier_alert_threshold=0.25)
 whale_tracker = WhaleSignalTracker()
+hourly_engine = HourlySummaryEngine()
 
 strategies = [
     ShotgunMomentumStrategy(),           # 15m Trend + Binance Order Flow (CVD & Depth Wall Confluence)
@@ -80,7 +82,7 @@ aggregator = SignalAggregator()
 risk_engine = RiskEngine()
 paper_tracker = PaperTracker()
 binance_client = BinanceExecutionClient()
-telegram_gateway = TelegramGateway()
+telegram_gateway = TelegramGateway(send_individual_alerts=False)
 
 loaded_brains = {}
 current_prices = {}
@@ -128,19 +130,9 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
         stats = paper_tracker.get_stats()
         # Muted internal bot trade closed alert (routed exclusively to Copy Trader signals)
 
-    # 1.5 Evaluate on-chain whale & copy trader signal accuracy trajectories
-    resolved_whales = whale_tracker.update_prices(price_dict)
-    for rw in resolved_whales:
-        if rw.get("status") == "TP_HIT":
-            asyncio.create_task(telegram_gateway.send_message(
-                f"🎯 *[ALPHAQUANT] ⚡ WHALE TARGET REACHED!*\n\n"
-                f"• *Asset*: `{rw.get('symbol')}` (*{rw.get('direction')}*)\n"
-                f"• *Source*: `{rw.get('source_name')}`\n"
-                f"• *Exit Price*: `${float(rw.get('exit_price', 0.0)):.4f}`\n"
-                f"• *Realized Return*: *+{float(rw.get('realized_pnl_pct', 3.0)):.1f}%* 🚀\n"
-                f"• *Peak Profit Run-up*: *+{float(rw.get('peak_mfe_pct', 3.0)):.2f}%*\n\n"
-                f"🛡️ *Target Take Profit Achieved!*"
-            ))
+    # 1.5 Evaluate on-chain whale & copy trader signal accuracy trajectories (Silent tracking for Hourly Digest)
+    whale_tracker.update_prices(price_dict)
+
 
 
     # 🟢 High-Efficiency CPU Throttle: Only compute 500-bar Pandas feature vectors and ML inference once every 10s per symbol
@@ -314,6 +306,30 @@ async def scheduled_auto_train_loop():
             print(f"[AUTO-TRAIN ERROR]: {e}")
         await asyncio.sleep(1800) # Check every 30 minutes
 
+async def hourly_summary_scheduler_loop():
+    """Dispatches Design 1 Hourly Performance Summary at the top of every hour (HH:00:00 UTC)."""
+    last_sent_hour = None
+    # Send initial test summary on startup so user sees the live template immediately
+    try:
+        init_msg = hourly_engine.build_summary_message(test_mode=True)
+        await telegram_gateway.send_message(init_msg)
+        last_sent_hour = datetime.now(timezone.utc).hour
+        print("[HOURLY SUMMARY] Dispatched initial operational summary to Telegram.")
+    except Exception as e:
+        print(f"[HOURLY SUMMARY] Initial dispatch warning: {e}")
+
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            if now.minute == 0 and now.hour != last_sent_hour:
+                last_sent_hour = now.hour
+                msg = hourly_engine.build_summary_message(test_mode=False)
+                await telegram_gateway.send_message(msg)
+                print(f"[HOURLY SUMMARY] Sent hourly report for {now.strftime('%H:00 UTC')}")
+        except Exception as e:
+            print(f"[HOURLY SUMMARY LOOP ERROR]: {e}")
+        await asyncio.sleep(25) # Check every 25 seconds
+
 async def main():
     print("==================================================")
     print("   ALPHAQUANT UNIFIED QUANTITATIVE SIGNAL ENGINE  ")
@@ -367,15 +383,17 @@ async def main():
     hyperliquid_collector.register_whale_callback(on_hyperliquid_whale_entry)
 
 
-    # 6. Launch Collector, Binance Lead Traders, Hyperliquid On-Chain Whales, Periodic Intelligence, and Auto-Train Loops
+    # 6. Launch Collector, Binance Lead Traders, Hyperliquid On-Chain Whales, Periodic Intelligence, Auto-Train, and Hourly Summary Loops
     await asyncio.gather(
         collector.start_all_streams(),
         lead_trader_collector.start_polling_loop(interval_seconds=45),
         hyperliquid_collector.run_loop(poll_interval_seconds=15),
+        hourly_summary_scheduler_loop(),
         periodic_intelligence_loop(),
         scheduled_auto_train_loop(),
         return_exceptions=True
     )
+
 
 if __name__ == "__main__":
     asyncio.run(main())
