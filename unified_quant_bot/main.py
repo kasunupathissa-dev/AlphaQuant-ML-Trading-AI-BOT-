@@ -108,7 +108,10 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
     current_prices[symbol] = close_price
 
     # 1. Evaluate open paper positions for TP/SL resolution (Fast O(1) in-memory check)
-    closed_events = paper_tracker.update_positions({symbol: latest_bar})
+    price_dict = dict(current_prices)
+    price_dict[symbol] = latest_bar
+    closed_events = paper_tracker.update_positions(price_dict)
+
     for ce in closed_events:
         risk_engine.unregister_position(ce['symbol'])
         is_win = (ce['status'] == "PROFIT")
