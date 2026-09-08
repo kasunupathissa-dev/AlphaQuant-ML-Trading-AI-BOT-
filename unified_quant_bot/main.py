@@ -56,6 +56,7 @@ from unified_quant_bot.models.ensemble_brain import MetaLabelingFilter
 from unified_quant_bot.monitoring.drift_monitor import ModelDriftMonitor
 from unified_quant_bot.monitoring.whale_signal_tracker import WhaleSignalTracker
 from unified_quant_bot.monitoring.hourly_summary_engine import HourlySummaryEngine
+from unified_quant_bot.aggregator.confluence_engine import TriFactorConfluenceEngine
 from unified_quant_bot.data.lead_trader_collector import LeadTraderCollector
 from unified_quant_bot.data.hyperliquid_collector import HyperliquidWhaleCollector
 
@@ -68,6 +69,7 @@ hyperliquid_collector = HyperliquidWhaleCollector()
 feature_engine = FeatureEngine()
 pump_scanner = PumpScanner()
 meta_filter = MetaLabelingFilter(min_meta_confidence=65.0)
+confluence_engine = TriFactorConfluenceEngine(min_ml_confidence=65.0, min_smc_score=55.0)
 drift_monitor = ModelDriftMonitor(window_size=50, brier_alert_threshold=0.25)
 whale_tracker = WhaleSignalTracker()
 hourly_engine = HourlySummaryEngine()
@@ -206,6 +208,36 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
     if not meta_risk['eligible']:
         return
 
+    # 4.6 Evaluate Tri-Factor Institutional Confluence Gate (SMC + External Bias + Decay)
+    confluence_audit = confluence_engine.evaluate_confluence(
+        symbol=symbol,
+        direction=best_signal['side'],
+        ml_confidence=best_signal['confidence'],
+        df_candles=df_15m_ind,
+        extra_context=extra_ctx
+    )
+
+    if not confluence_audit['is_approved']:
+        try:
+            async with AsyncSessionLocal() as db:
+                rej = SignalRejection(
+                    symbol=symbol,
+                    direction=best_signal['side'],
+                    strategy=best_signal['strategy_name'],
+                    win_prob=best_signal['confidence'],
+                    threshold=65.0,
+                    regime=best_signal['market_regime'],
+                    rejection_reason=f"CONFLUENCE_REJECTED: {confluence_audit.get('rejection_reason')}",
+                    entry_price=best_signal['entry_price'],
+                    sl_price=best_signal['stop_loss'],
+                    tp_price=best_signal['take_profit']
+                )
+                db.add(rej)
+                await db.commit()
+        except Exception:
+            pass
+        return
+
     # 5. Evaluate Deterministic Risk Engine
     balance = await binance_client.get_margin_balance()
     spread_pct = (ob_snapshot.get('spread', 0.0) / close_price) * 100.0 if close_price > 0 else 0.02
@@ -221,19 +253,24 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
     )
 
     if risk_audit['eligible']:
-        # Auto-Approve Paper Trade
+        # Auto-Approve Paper Trade with Grade-Adjusted Position Sizing
+        base_qty = float(risk_audit['quantity'])
+        final_qty = round(base_qty * float(confluence_audit.get('size_multiplier', 1.0)), 4)
+        if final_qty <= 0:
+            final_qty = base_qty
+
         risk_engine.register_position(symbol)
         paper_tracker.record_entry(
             symbol=symbol,
             direction=best_signal['side'],
-            strategy=best_signal['strategy_name'],
+            strategy=f"{best_signal['strategy_name']}_[Grade_{confluence_audit.get('grade', 'A')}]",
             entry=best_signal['entry_price'],
             sl=best_signal['stop_loss'],
             tp=best_signal['take_profit'],
-            quantity=risk_audit['quantity'],
-            win_prob=best_signal['confidence']
+            quantity=final_qty,
+            win_prob=f"{best_signal['confidence']:.1f}% (Conf: {confluence_audit.get('effective_confluence', 0.0):.1f})"
         )
-        # Muted internal bot trade execution alert (routed exclusively to Copy Trader signals)
+        print(f"[CONFLUENCE APPROVED] {symbol} {best_signal['side']} - Grade: {confluence_audit.get('grade')} | Eff Confluence: {confluence_audit.get('effective_confluence')}%")
     else:
         # Log to Rejection Audit
         try:
