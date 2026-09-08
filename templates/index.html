@@ -747,14 +747,18 @@
             completed.slice(0, 25).forEach(t => {
                 const sym = t.asset || t.symbol || 'UNKNOWN';
                 const pnl = parseFloat(t.pnl || 0);
-                const isWin = (t.status || '').toUpperCase() === 'PROFIT' || (t.status || '').toUpperCase() === 'WIN' || pnl >= 0;
+                const isWin = pnl > 0;
+                const isBreakeven = Math.abs(pnl) < 0.0001;
                 const dir = (t.direction || 'LONG').toUpperCase();
                 const entry = parseFloat(t.entry || 0);
                 const exitVal = parseFloat(t.exit_price || 0);
                 const exitStr = exitVal > 0 ? `$${exitVal.toFixed(4)}` : `$${entry.toFixed(4)}`;
 
-                const statusBadge = isWin ? '<span class="badge badge-win">✅ PROFIT</span>' : '<span class="badge badge-loss">❌ LOSS</span>';
-                const pnlDisplay = `<span class="${pnl >= 0 ? 'positive' : 'negative'}" style="font-family: var(--font-mono); font-weight:700;">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`;
+                const statusBadge = isBreakeven
+                    ? '<span class="badge" style="background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3);">⚪ EVEN</span>'
+                    : (isWin ? '<span class="badge badge-win">✅ PROFIT</span>' : '<span class="badge badge-loss">❌ LOSS</span>');
+                const pnlDisplay = `<span class="${pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '')}" style="font-family: var(--font-mono); font-weight:700;">${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`;
+
                 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `

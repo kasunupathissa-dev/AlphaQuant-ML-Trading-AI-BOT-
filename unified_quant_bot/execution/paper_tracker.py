@@ -306,9 +306,8 @@ class PaperTracker:
                 # Deduct simulated 0.10% taker fee roundtrip
                 gross_pnl = (exit_price - entry) * quantity if direction == "LONG" else (entry - exit_price) * quantity
                 fee_deduction = (entry * quantity * 0.0005) + (exit_price * quantity * 0.0005)
-                net_pnl = gross_pnl - fee_deduction
-
-                pos["status"] = status
+                final_status = "PROFIT" if net_pnl > 0 else "LOSS"
+                pos["status"] = final_status
                 pos["exit_price"] = exit_price
                 pos["pnl"] = round(net_pnl, 4)
                 pos["exit_time"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -316,7 +315,8 @@ class PaperTracker:
                 trades_to_remove.append(trade_id)
                 closed_events.append(pos.copy())
                 self._update_trade_in_csv(pos)
-                print(f"[PAPER] Trade {trade_id} ({symbol} {direction}) CLOSED with {status} at ${exit_price:.4f} (P&L: ${net_pnl:.2f})")
+                print(f"[PAPER] Trade {trade_id} ({symbol} {direction}) CLOSED with {final_status} at ${exit_price:.4f} (Net P&L: ${net_pnl:.2f})")
+
 
         for t_id in trades_to_remove:
             self.active_positions.pop(t_id, None)
