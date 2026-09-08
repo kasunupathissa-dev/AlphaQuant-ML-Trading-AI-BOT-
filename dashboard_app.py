@@ -345,6 +345,42 @@ class DashboardHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 }
             self.send_json(smart_money_data)
 
+        # 2.6 API Endpoint: Whale & Copy Trader Signals Accuracy Leaderboard
+        elif path == '/api/whale_signals':
+            try:
+                whale_log_path = os.path.join(REPO_ROOT, "whale_copy_signals_log.csv")
+                signals = []
+                if os.path.exists(whale_log_path):
+                    with open(whale_log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            signals.append(row)
+
+                completed = [s for s in signals if s.get('status', '').upper() in ('TP_HIT', 'SL_HIT', 'WIN', 'LOSS')]
+                tp_hits = sum(1 for s in completed if s.get('status', '').upper() in ('TP_HIT', 'WIN'))
+                sl_hits = sum(1 for s in completed if s.get('status', '').upper() in ('SL_HIT', 'LOSS'))
+                total_comp = len(completed)
+
+                full_winrate = (tp_hits / total_comp * 100.0) if total_comp > 0 else 0.0
+                partial_hits = sum(1 for s in signals if float(s.get('peak_mfe_pct', 0.0) or 0.0) >= 1.5)
+                partial_rate = (partial_hits / len(signals) * 100.0) if len(signals) > 0 else 0.0
+
+                mfes = [float(s.get('peak_mfe_pct', 0.0) or 0.0) for s in signals]
+                avg_mfe = (sum(mfes) / len(mfes)) if mfes else 0.0
+
+                self.send_json({
+                    "total_signals": len(signals),
+                    "completed_signals": total_comp,
+                    "tp_hits": tp_hits,
+                    "sl_hits": sl_hits,
+                    "full_tp_winrate": round(full_winrate, 2),
+                    "partial_tp_rate": round(partial_rate, 2),
+                    "avg_peak_mfe": round(avg_mfe, 2),
+                    "signals": signals[::-1][:100]
+                })
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+
         # 3. API Endpoint: Statistical Report
         elif path == '/api/stats':
             def get_service_env(bot_name):

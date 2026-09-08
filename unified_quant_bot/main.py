@@ -54,6 +54,7 @@ from unified_quant_bot.monitoring.telegram_gateway import TelegramGateway
 
 from unified_quant_bot.models.ensemble_brain import MetaLabelingFilter
 from unified_quant_bot.monitoring.drift_monitor import ModelDriftMonitor
+from unified_quant_bot.monitoring.whale_signal_tracker import WhaleSignalTracker
 from unified_quant_bot.data.lead_trader_collector import LeadTraderCollector
 from unified_quant_bot.data.hyperliquid_collector import HyperliquidWhaleCollector
 
@@ -67,6 +68,7 @@ feature_engine = FeatureEngine()
 pump_scanner = PumpScanner()
 meta_filter = MetaLabelingFilter(min_meta_confidence=65.0)
 drift_monitor = ModelDriftMonitor(window_size=50, brier_alert_threshold=0.25)
+whale_tracker = WhaleSignalTracker()
 
 strategies = [
     ShotgunMomentumStrategy(),           # 15m Trend + Binance Order Flow (CVD & Depth Wall Confluence)
@@ -82,6 +84,7 @@ telegram_gateway = TelegramGateway()
 
 loaded_brains = {}
 current_prices = {}
+
 
 def load_ml_brains():
     """Loads pre-trained ML brain classifiers from repository root."""
@@ -107,7 +110,7 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
     close_price = latest_bar['close']
     current_prices[symbol] = close_price
 
-    # 1. Evaluate open paper positions for TP/SL resolution (Fast O(1) in-memory check)
+    # 1. Evaluate open paper positions and on-chain whale signals for TP/SL resolution
     price_dict = dict(current_prices)
     price_dict[symbol] = latest_bar
     closed_events = paper_tracker.update_positions(price_dict)
@@ -124,6 +127,21 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
         
         stats = paper_tracker.get_stats()
         # Muted internal bot trade closed alert (routed exclusively to Copy Trader signals)
+
+    # 1.5 Evaluate on-chain whale & copy trader signal accuracy trajectories
+    resolved_whales = whale_tracker.update_prices(price_dict)
+    for rw in resolved_whales:
+        if rw.get("status") == "TP_HIT":
+            asyncio.create_task(telegram_gateway.send_message(
+                f"🎯 *[ALPHAQUANT] ⚡ WHALE TARGET REACHED!*\n\n"
+                f"• *Asset*: `{rw.get('symbol')}` (*{rw.get('direction')}*)\n"
+                f"• *Source*: `{rw.get('source_name')}`\n"
+                f"• *Exit Price*: `${float(rw.get('exit_price', 0.0)):.4f}`\n"
+                f"• *Realized Return*: *+{float(rw.get('realized_pnl_pct', 3.0)):.1f}%* 🚀\n"
+                f"• *Peak Profit Run-up*: *+{float(rw.get('peak_mfe_pct', 3.0)):.2f}%*\n\n"
+                f"🛡️ *Target Take Profit Achieved!*"
+            ))
+
 
     # 🟢 High-Efficiency CPU Throttle: Only compute 500-bar Pandas feature vectors and ML inference once every 10s per symbol
     now = time.time()
@@ -314,9 +332,40 @@ async def main():
     await collector.prewarm_buffers()
 
     # 5. Register Candle, Binance Copy Trader & Hyperliquid Whale Callbacks
+    async def on_copy_trader_entry(trader, pos, consensus=None):
+        try:
+            whale_tracker.record_signal(
+                signal_type="COPY_TRADER",
+                source_name=trader.get("nickName", "LeadTrader"),
+                symbol=pos.get("symbol", "BTC/USDT"),
+                direction=pos.get("direction", "LONG"),
+                entry_price=float(pos.get("entry", 0.0)),
+                tp_target=float(pos.get("tp", 0.0)) if pos.get("tp") else None,
+                sl_target=float(pos.get("sl", 0.0)) if pos.get("sl") else None
+            )
+        except Exception as err:
+            print(f"[WHALE TRACKER ERROR]: {err}")
+        await telegram_gateway.send_copy_trader_signal(trader, pos, consensus)
+
+    async def on_hyperliquid_whale_entry(whale, pos):
+        try:
+            whale_tracker.record_signal(
+                signal_type="HYPERLIQUID_WHALE",
+                source_name=whale.get("wallet", "0x..."),
+                symbol=pos.get("symbol", "BTC/USDT"),
+                direction=pos.get("direction", "LONG"),
+                entry_price=float(pos.get("entry", 0.0)),
+                tp_target=float(pos.get("tp", 0.0)) if pos.get("tp") else None,
+                sl_target=float(pos.get("sl", 0.0)) if pos.get("sl") else None
+            )
+        except Exception as err:
+            print(f"[WHALE TRACKER ERROR]: {err}")
+        await telegram_gateway.send_hyperliquid_whale_signal(whale, pos)
+
     collector.register_candle_callback(handle_candle_closed)
-    lead_trader_collector.register_position_callback(telegram_gateway.send_copy_trader_signal)
-    hyperliquid_collector.register_whale_callback(telegram_gateway.send_hyperliquid_whale_signal)
+    lead_trader_collector.register_position_callback(on_copy_trader_entry)
+    hyperliquid_collector.register_whale_callback(on_hyperliquid_whale_entry)
+
 
     # 6. Launch Collector, Binance Lead Traders, Hyperliquid On-Chain Whales, Periodic Intelligence, and Auto-Train Loops
     await asyncio.gather(
