@@ -173,7 +173,7 @@ class PaperTracker:
             "tp": float(tp),
             "quantity": float(quantity),
             "status": "OPEN",
-            "win_prob": f"{win_prob:.2f}%",
+            "win_prob": f"{float(win_prob):.2f}%" if isinstance(win_prob, (int, float)) else str(win_prob),
             "pnl": 0.0,
             "exit_price": 0.0,
             "exit_time": "",

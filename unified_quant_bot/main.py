@@ -124,7 +124,7 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
         is_win = (ce['status'] == "PROFIT")
         risk_engine.record_trade_result(ce['symbol'], is_win)
         try:
-            prob_num = float(str(ce.get('win_prob', '65.0')).replace('%', '').strip())
+            prob_num = float(str(ce.get('win_prob', '65.0')).split('%')[0].split('(')[0].strip())
             drift_monitor.record_prediction_outcome(prob_num, is_win)
         except Exception:
             pass
