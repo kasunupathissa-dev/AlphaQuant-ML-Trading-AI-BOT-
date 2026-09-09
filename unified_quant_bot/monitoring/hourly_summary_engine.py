@@ -72,13 +72,26 @@ class HourlySummaryEngine:
         # 3. Compute Today's Cumulative Metrics
         td_wins = sum(1 for t in today_closed if t.get('status', '').upper() in ('PROFIT', 'WIN', 'TP_HIT') or float(t.get('pnl', 0.0) or 0.0) > 0)
         td_tot = len(today_closed)
-        cum_wr = (td_wins / td_tot * 100.0) if td_tot > 0 else hr_wr
+        cum_wr = (td_wins / td_tot * 100.0) if td_tot > 0 else 0.0
         cum_pnl = sum(float(t.get('pnl', 0.0) or 0.0) for t in today_closed) if today_closed else hr_pnl
 
-        gauge_bar = generate_progress_bar(hr_wr, 10)
-        wr_emoji = "🟢" if hr_wr >= 50 else ("🔴" if tot_closed > 0 else "⚪")
+        gauge_bar = generate_progress_bar(hr_wr if tot_closed > 0 else (cum_wr if td_tot > 0 else 50.0), 10)
         pnl_sign = "+" if hr_pnl >= 0 else ""
         cum_sign = "+" if cum_pnl >= 0 else ""
+
+        if tot_closed > 0:
+            hr_wr_str = f"*{hr_wr:.1f}%* `[{gauge_bar}]`"
+            wr_emoji = "🟢" if hr_wr >= 50 else "🔴"
+            hr_trades_str = f"*{tot_closed} Total* (*{wins}W / {losses}L*)"
+        else:
+            hr_wr_str = f"`Flat / In Sync (0 Settled in 1H)`"
+            wr_emoji = "⚪"
+            hr_trades_str = "*0 Closed* (Scanning 24 Streams)"
+
+        if td_tot > 0:
+            today_cum_str = f"*{cum_sign}${cum_pnl:.2f}* (Win Rate: *{cum_wr:.1f}%* | *{td_wins}W / {td_tot - td_wins}L*)"
+        else:
+            today_cum_str = f"*{cum_sign}${cum_pnl:.2f}* (All-Time Active)"
 
         # 4. Read Live State and Active Positions
         active_positions = []
@@ -143,10 +156,10 @@ class HourlySummaryEngine:
             f"🕒 *Period*: `{start_str} - {end_str} UTC` | Status: 🟢 `ONLINE`\n\n"
             f"📊 *HOURLY METRICS*:\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• *Hourly Win Rate*: {wr_emoji} *{hr_wr:.1f}%* `[{gauge_bar}]`\n"
-            f"• *Trades Executed*: *{tot_closed} Total* (*{wins}W / {losses}L*)\n"
+            f"• *Hourly Win Rate*: {wr_emoji} {hr_wr_str}\n"
+            f"• *Trades Executed*: {hr_trades_str}\n"
             f"• *Net Realized P&L*: *{pnl_sign}${hr_pnl:.2f} USD*\n"
-            f"• *Today's Cumulative*: *{cum_sign}${cum_pnl:.2f}* (Win Rate: *{cum_wr:.1f}%*)\n\n"
+            f"• *Today's Cumulative*: {today_cum_str}\n\n"
             f"📜 *CLOSED POSITIONS (LAST 1H)*:\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"{closed_block}\n\n"

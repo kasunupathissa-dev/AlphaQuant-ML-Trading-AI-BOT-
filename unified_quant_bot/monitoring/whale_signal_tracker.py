@@ -137,6 +137,11 @@ class WhaleSignalTracker:
                 sig["peak_mfe_pct"] = round(max(curr_peak, mfe), 2)
                 sig["max_drawdown_pct"] = round(min(curr_draw, mae), 2)
 
+                # Dynamic Breakeven & Trailing SL adjustment
+                if sig["peak_mfe_pct"] >= 1.0 and sl < entry:
+                    sl = entry * 1.001 # Move SL to Breakeven (+0.1% buffer)
+                    sig["sl_target"] = round(sl, 4)
+
                 is_resolved = False
                 status = "OPEN"
                 exit_p = close
@@ -147,11 +152,16 @@ class WhaleSignalTracker:
                     status = "TP_HIT"
                     exit_p = tp
                     ret_pct = 3.0
+                elif sig["peak_mfe_pct"] >= 1.2 and low <= sl:
+                    is_resolved = True
+                    status = "TP1_HIT"
+                    exit_p = sl
+                    ret_pct = 0.8
                 elif low <= sl:
                     is_resolved = True
-                    status = "SL_HIT"
+                    status = "BE_HIT" if sl >= entry else "SL_HIT"
                     exit_p = sl
-                    ret_pct = -1.5
+                    ret_pct = 0.1 if sl >= entry else -1.5
             else: # SHORT
                 mfe = ((entry - low) / entry) * 100.0
                 mae = ((entry - high) / entry) * 100.0
@@ -159,6 +169,11 @@ class WhaleSignalTracker:
                 curr_draw = float(sig.get("max_drawdown_pct", 0.0) or 0.0)
                 sig["peak_mfe_pct"] = round(max(curr_peak, mfe), 2)
                 sig["max_drawdown_pct"] = round(min(curr_draw, mae), 2)
+
+                # Dynamic Breakeven & Trailing SL adjustment
+                if sig["peak_mfe_pct"] >= 1.0 and sl > entry:
+                    sl = entry * 0.999 # Move SL to Breakeven (+0.1% buffer)
+                    sig["sl_target"] = round(sl, 4)
 
                 is_resolved = False
                 status = "OPEN"
@@ -170,11 +185,16 @@ class WhaleSignalTracker:
                     status = "TP_HIT"
                     exit_p = tp
                     ret_pct = 3.0
+                elif sig["peak_mfe_pct"] >= 1.2 and high >= sl:
+                    is_resolved = True
+                    status = "TP1_HIT"
+                    exit_p = sl
+                    ret_pct = 0.8
                 elif high >= sl:
                     is_resolved = True
-                    status = "SL_HIT"
+                    status = "BE_HIT" if sl <= entry else "SL_HIT"
                     exit_p = sl
-                    ret_pct = -1.5
+                    ret_pct = 0.1 if sl <= entry else -1.5
 
             if is_resolved:
                 sig["status"] = status
@@ -230,9 +250,9 @@ class WhaleSignalTracker:
                 for row in reader:
                     signals.append(row)
 
-            completed = [s for s in signals if s.get('status', '').upper() in ('TP_HIT', 'SL_HIT', 'WIN', 'LOSS')]
-            tp_hits = sum(1 for s in completed if s.get('status', '').upper() in ('TP_HIT', 'WIN'))
-            sl_hits = sum(1 for s in completed if s.get('status', '').upper() in ('SL_HIT', 'LOSS'))
+            completed = [s for s in signals if s.get('status', '').upper() in ('TP_HIT', 'TP1_HIT', 'BE_HIT', 'SL_HIT', 'WIN', 'LOSS', 'PROFIT')]
+            tp_hits = sum(1 for s in completed if s.get('status', '').upper() in ('TP_HIT', 'TP1_HIT', 'BE_HIT', 'WIN', 'PROFIT') or float(s.get('realized_pnl_pct', 0.0) or 0.0) > 0)
+            sl_hits = len(completed) - tp_hits
             total_comp = len(completed)
 
             full_winrate = (tp_hits / total_comp * 100.0) if total_comp > 0 else 0.0

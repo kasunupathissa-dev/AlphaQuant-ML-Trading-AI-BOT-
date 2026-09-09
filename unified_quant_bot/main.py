@@ -132,6 +132,9 @@ async def handle_candle_closed(symbol: str, timeframe: str, latest_bar: dict):
         stats = paper_tracker.get_stats()
         # Muted internal bot trade closed alert (routed exclusively to Copy Trader signals)
 
+    # 1.1 Strict Invariant: Always keep RiskEngine active positions in 100% sync with PaperTracker
+    risk_engine.sync_active_positions(paper_tracker.get_active_symbols())
+
     # 1.5 Evaluate on-chain whale & copy trader signal accuracy trajectories (Silent tracking for Hourly Digest)
     whale_tracker.update_prices(price_dict)
 

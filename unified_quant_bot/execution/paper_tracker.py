@@ -73,6 +73,10 @@ class PaperTracker:
         except Exception as e:
             print(f"[PAPER] CSV normalization error: {e}")
 
+    def get_active_symbols(self) -> set:
+        """Returns set of symbols currently having active open positions."""
+        return {p.get("symbol") for p in self.active_positions.values() if p.get("symbol")}
+
     def _load_active_positions(self):
         if not os.path.exists(self.log_path):
             return

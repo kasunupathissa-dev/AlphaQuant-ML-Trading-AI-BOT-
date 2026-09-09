@@ -71,6 +71,10 @@ class RiskEngine:
     def unregister_position(self, symbol: str):
         self.active_positions.discard(symbol)
 
+    def sync_active_positions(self, active_symbols: set):
+        """Forces strict synchronization with live open positions from PaperTracker."""
+        self.active_positions = set(active_symbols)
+
     def check_drawdown_limit(self, current_balance: float) -> bool:
         """Evaluates daily drawdown limit from peak equity."""
         if self.daily_peak_equity is None or current_balance > self.daily_peak_equity:
