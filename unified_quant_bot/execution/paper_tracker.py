@@ -252,17 +252,20 @@ class PaperTracker:
             init_sl = float(pos.get("initial_sl", sl) or sl)
             approx_atr = abs(entry - init_sl) / 1.5 if abs(entry - init_sl) > 0 else (entry * 0.01)
 
-            # 🟢 Dynamic Volatility Trailing Stop Ratchet:
+            # 🟢 Dynamic Fee-Immune Volatility Trailing Stop Ratchet:
+            min_fee_buffer = entry * 0.0025 # Guaranteed +0.25% buffer to cover 0.10% roundtrip taker fee + clear profit
+            min_activation_profit = max(entry * 0.006, 1.0 * approx_atr) # Requires at least +0.60% gross move to activate trailing
+
             if direction == "LONG":
                 peak_p = float(pos.get("peak_price", entry) or entry)
                 if high > peak_p:
                     pos["peak_price"] = high
                 
-                # If unrealized profit reached >= 1.0x ATR -> activate trailing profit protection
-                if (high - entry) >= (1.0 * approx_atr):
+                # Activate trailing profit protection only after reaching >= +0.60% / 1.0x ATR
+                if (high - entry) >= min_activation_profit:
                     pos["trailing_active"] = True
-                    be_level = entry + (0.2 * approx_atr)
-                    trailing_sl = float(pos["peak_price"]) - (1.5 * approx_atr)
+                    be_level = entry + max(0.3 * approx_atr, min_fee_buffer)
+                    trailing_sl = float(pos["peak_price"]) - (1.2 * approx_atr)
                     new_sl = max(sl, max(be_level, trailing_sl))
                     if new_sl > sl:
                         sl = round(new_sl, 4)
@@ -273,11 +276,11 @@ class PaperTracker:
                 if low < trough_p:
                     pos["trough_price"] = low
                 
-                # If unrealized profit reached >= 1.0x ATR -> activate trailing profit protection
-                if (entry - low) >= (1.0 * approx_atr):
+                # Activate trailing profit protection only after reaching >= +0.60% / 1.0x ATR
+                if (entry - low) >= min_activation_profit:
                     pos["trailing_active"] = True
-                    be_level = entry - (0.2 * approx_atr)
-                    trailing_sl = float(pos["trough_price"]) + (1.5 * approx_atr)
+                    be_level = entry - max(0.3 * approx_atr, min_fee_buffer)
+                    trailing_sl = float(pos["trough_price"]) + (1.2 * approx_atr)
                     new_sl = min(sl, min(be_level, trailing_sl))
                     if new_sl < sl:
                         sl = round(new_sl, 4)

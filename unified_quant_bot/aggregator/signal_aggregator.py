@@ -10,10 +10,10 @@ class SignalAggregator:
 
     def __init__(self):
         self.strategy_weights = {
-            "ShotgunMomentumStrategy": 1.25, # Proven 71.11% Win Rate Core
+            "ShotgunMomentumStrategy": 1.35, # Primary Institutional Trend & Order Flow Core
+            "VolumePumpMomentumStrategy": 1.25, # High-Impact Volume Breakouts
             "LiquidationCascadeStrategy": 1.15,
-            "VolumePumpMomentumStrategy": 1.10,
-            "StatisticalMeanReversionStrategy": 1.00
+            "StatisticalMeanReversionStrategy": 0.90 # Range Reversals (Restricted to major swings)
         }
         self.last_signal_time = time.time()
         self.drought_threshold_seconds = 21600 # 6 hours

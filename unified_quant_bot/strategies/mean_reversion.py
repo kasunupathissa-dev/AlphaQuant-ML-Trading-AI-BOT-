@@ -59,8 +59,8 @@ class StatisticalMeanReversionStrategy(BaseStrategy):
             return None
 
         atr = float(df['atr_14'].iloc[-1]) if 'atr_14' in df.columns else (close * 0.012)
-        sl_dist = 1.5 * atr
-        tp_dist = max(3.0 * atr, abs(close - mean)) # Ensure at least 1:2.0 RRR
+        sl_dist = max(close * 0.008, 1.2 * atr)
+        tp_dist = max(close * 0.016, max(2.5 * atr, abs(close - mean))) # Minimum +1.6% profit target to ensure high fee immunity and 1:2 RRR
 
         sl_price = close - sl_dist if side == "LONG" else close + sl_dist
         tp_price = close + tp_dist if side == "LONG" else close - tp_dist
